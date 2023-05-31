@@ -15,18 +15,9 @@ from visualization import *
 상승하는거 팔때: [2, 3, 6]으로 해서 6이 상승중이면 23 교차해도 안팔기 (곧 또 상승할거라 예측)
             대신 6이 하락하면 팔기
 
-
-is_remaining_order 처리
-0. 여태까지 데이터로 시뮬 먼저 해봐야 함
-    - 100개의 tf로 그래프 그리기
-    - 사고 파는 부분 표시
-    - 손익-수수료 계산 합
-1. 지정가 주문: open order 
-                -> 1 tf 기다려보기
-                -> 안되면 걍 취소 ㅋㅋ
-                -> 처리 되면 현재 profit 계속 계산
-2. m1, m2, m3으로 m1 m2만 본게 일정 수익이 안되면 m2 m3 상승시 안팔기
-3. 닫은 거래의 pnl, 여태까지 기록 계산 
+1. 함수 정리
+2. 중간에 껐다 켜도 현상태 받아와서 똑같이 지속되도록
+3. visualization
 """
 class Trader():
     def __init__(self) -> None:
@@ -47,11 +38,11 @@ class Trader():
         self.order_num = 30
         self.tf = '1m'
         self.tf_ = int(self.tf[:-1])
-        self.limit = 10  # for past_data
         self.n = 5       # 걍 3보다 크면 됨
         self.lev = 2
         self.amount = 0.001
         self.wins = [1, 2, 11, 17]
+        self.limit = self.wins[-1]+5  # for past_data
         print(f"{'*'*50}\ntf: {self.tf}  lev:{self.lev}  amt: {self.amount}  inf: {self.wins}\n{'*'*50}")
         self.binance.load_markets()
         self.inquire_my_wallet()
@@ -90,20 +81,23 @@ class Trader():
 
     def e_long(self):  # 오를것이다
         self.binance.load_markets()
+        a = 0.01*0.012342342423423
         price = self.inquire_curr_price(self.sym)
+        # price = price*(1-a)
         market = self.binance.markets[self.sym]
 
         resp = self.binance.set_leverage(
             symbol=market['id'],
             leverage=self.lev,
         )
-        params = {'timeInForce': 'GTX',}
+        params = {'timeInForce': 'GTC',}
         order = self.binance.create_limit_buy_order(
             symbol=self.sym,
             amount=self.amount,
             price=price,
             params=params,
             )
+        self.order_id = order['id']
         if not order["postOnly"]:
             print("\n\n\n!It's not post-only order!")
         print(f'Posted [price: {price}]')
@@ -118,13 +112,14 @@ class Trader():
             leverage=self.lev,
         )
         
-        params = {'timeInForce': 'GTX',}
+        params = {'timeInForce': 'GTC',}
         order = self.binance.create_limit_sell_order(
             symbol=self.sym,
             amount=self.amount,
             price=price,
             params=params,
             )
+        self.order_id = order['id']
         if not order["postOnly"]:
             print("\n\n\n!It's not post-only order!")
         print(f'Posted [price: {price}]')
@@ -244,10 +239,31 @@ class Trader():
                 
                 if status:
                     tr['ent'] = [i, m1[i]]
-                    ent_price = m1[i]
+                    ent_price = m1[i]                
+
+                    positionamt = 0
+                    start = time.time()
+                    waiting = 0
+                    while positionamt == 0 and waiting < self.tf_*60:
+                        waiting = time.time() - start
+                        balance = self.binance.fetch_balance()
+                        positions = balance['info']['positions']
+
+                        for position in positions:
+                            if position["symbol"] == self.sym.replace("/", ""):
+                                positionamt = position['positionAmt']
+                    if positionamt == 0:
+                        resp = self.binance.cancel_order(
+                                id=self.order_id,
+                                symbol=self.sym
+                            )
+                    self.inquire_my_wallet(justshow=self.sym)
+
             else :
                 p = 2*(-0.5+int(status=="Long"))
                 curr_pnl = p*(m1[i] - ent_price)/ent_price*100
+                if iter % 200 == 0:
+                    print("curr_pnl: ", curr_pnl)
                 if curr_pnl < -0.5 or\
                 (
                     curr_pnl > 0.2 and\
@@ -297,7 +313,7 @@ def close(pos, tr, lev=1):
         p = -1
     tr['position'] = pos
     profit = p*(tr['close'][1] - tr['ent'][1])/tr['ent'][1] # 1 means price
-    profit = 100*profit - 0.04
+    profit = 100*profit - 0.08
     tr['pnl'] = str(round(lev*profit, 4))+"%"
     return tr
 if __name__ == "__main__":
