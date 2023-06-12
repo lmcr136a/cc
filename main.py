@@ -36,7 +36,7 @@ class Trader():
         })
         self.sym = 'ETH/USDT'
         self.order_num = 30
-        self.tf = '1m'
+        self.tf = '3m'
         self.tf_ = int(self.tf[:-1])
         self.n = 5       # 걍 3보다 크면 됨
         self.lev = 5
@@ -49,6 +49,7 @@ class Trader():
         self.binance.load_markets()
         self.inquire_my_wallet()
         self.last_order = 0
+        self.status = 0
 
     ## 현재 정보 조회
     def inquire_curr_info(self, sym="BTC/USDT"):
@@ -71,15 +72,38 @@ class Trader():
         df.set_index('datetime', inplace=True)
         return df
 
-    def inquire_my_wallet(self, justshow=None):
+    def inquire_my_wallet(self):
         wallet = self.binance.fetch_balance(params={"type": "future"})
-        keys = ['used', 'total']
-        for k in keys:
-            if justshow:
-                s = justshow.split("/")[0]
-                print(f"{k} USDT: {wallet[k]['USDT']}  {s}: {wallet[k][s]}")
-            else:
-                print(f"\n{k}:\n {wallet[k]}")
+        print("\nMy wallet: ")
+        for k in ['used', 'total']:
+            for s in list(wallet[k].keys()):
+                if wallet[k][s]>0:
+                    print(f"{k} {s}: {wallet[k][s]}")
+        
+        positions = wallet['info']['positions']
+
+        symbol = []
+        size = []
+        pnl = []
+        for position in positions:
+            if position['initialMargin'] != '0':
+                symbol.append(position['symbol'])
+                size.append(position['notional'])
+                pnl.append(float(position['unrealizedProfit']))
+        
+        for i in range(len(symbol)):
+            print(f"[{symbol[i]}] size: {size[i]}  pnl: {pnl[i]}%\n")
+
+
+    def get_curr_pnl(self, sym):
+        wallet = self.binance.fetch_balance(params={"type": "future"})
+        positions = wallet['info']['positions']
+        for pos in positions:
+            if pos['symbol'] == sym:
+                pnl = float(pos['unrealizedProfit'])/float(pos['positionAmt'])/float(pos['entryPrice'])*100*float(pos['leverage'])
+                return pnl
+
+
 
     def e_long(self):  # 오를것이다
         self.binance.load_markets()
@@ -127,9 +151,8 @@ class Trader():
     def is_remaining_order(self):        
         balance = self.binance.fetch_balance()
         positions = balance['info']['positions']
-        print(positions)
         for position in positions:
-            if position["symbol"] == "BTCUSDT":
+            if position["symbol"] == self.sym.replace("/", ""):
                 print(position)
                 return True
         return False
@@ -143,7 +166,7 @@ class Trader():
         return m1, m2, m3, m4
 
     def run0612(self):
-        status = None
+        status = self.status
         transactions = []
         tr = {}
         order_i = 0
@@ -188,8 +211,7 @@ class Trader():
                     self.inquire_my_wallet(justshow=self.sym)
 
             else :
-                p = 2*(-0.5+int(status=="Long"))
-                curr_pnl = self.lev*p*(m1[i] - ent_price)/ent_price*100
+                curr_pnl = self.get_curr_pnl(self.sym.replace("/", ""))
                 if iter % 2000 == 0:
                     print("curr_pnl: ", curr_pnl)
                 iter += 1
