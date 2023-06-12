@@ -34,16 +34,18 @@ class Trader():
                 'defaultType': 'future'
             }
         })
-        self.sym = 'BTC/USDT'
+        self.sym = 'ETH/USDT'
         self.order_num = 30
         self.tf = '1m'
         self.tf_ = int(self.tf[:-1])
         self.n = 5       # 걍 3보다 크면 됨
-        self.lev = 2
-        self.amount = 0.001
+        self.lev = 5
+        self.amount = 0.01
         self.wins = [1, 2, 11, 17]
-        self.limit = self.wins[-1]+5  # for past_data
-        print(f"{'*'*50}\ntf: {self.tf}  lev:{self.lev}  amt: {self.amount}  inf: {self.wins}\n{'*'*50}")
+        self.limit = self.wins[-1]*5    # for past_data
+        self.max_loss = -3              # 마이너스인거 확인
+        self.min_profit = 0.5
+        print(f"{'*'*50}\ntf: {self.tf}  lev:{self.lev}  amt: {self.amount}  inf: {self.wins}\n{'*'*50}  [[{self.max_loss}~{self.min_profit}]]")
         self.binance.load_markets()
         self.inquire_my_wallet()
         self.last_order = 0
@@ -81,7 +83,6 @@ class Trader():
 
     def e_long(self):  # 오를것이다
         self.binance.load_markets()
-        a = 0.01*0.012342342423423
         price = self.inquire_curr_price(self.sym)
         # price = price*(1-a)
         market = self.binance.markets[self.sym]
@@ -90,12 +91,12 @@ class Trader():
             symbol=market['id'],
             leverage=self.lev,
         )
-        params = {'timeInForce': 'GTC',}
-        order = self.binance.create_limit_buy_order(
+        params = {'timeInForce': 'IOC',}
+        order = self.binance.create_market_buy_order(
             symbol=self.sym,
             amount=self.amount,
-            price=price,
-            params=params,
+            # price=price,
+            # params=params,
             )
         self.order_id = order['id']
         if not order["postOnly"]:
@@ -111,13 +112,12 @@ class Trader():
             symbol=market['id'],
             leverage=self.lev,
         )
-        
-        params = {'timeInForce': 'GTC',}
-        order = self.binance.create_limit_sell_order(
+        params = {'timeInForce': 'IOC',}
+        order = self.binance.create_market_sell_order(
             symbol=self.sym,
             amount=self.amount,
-            price=price,
-            params=params,
+            # price=price,
+            # params=params,
             )
         self.order_id = order['id']
         if not order["postOnly"]:
@@ -134,78 +134,6 @@ class Trader():
                 return True
         return False
 
-
-    def whether_increasing(self):
-        d1m = self.past_data(sym=self.sym, tf=self.tf, limit=self.limit)
-        ma1 = d1m['close'].rolling(window=self.wins[0]).mean()[-1]
-        ma2 =  d1m['close'].rolling(window=self.wins[1]).mean()[-1]
-        show_default_graph(d1m, d1m['close'].rolling(window=self.wins[0]).mean(), d1m['close'].rolling(window=self.wins[1]).mean(),
-                           n=10)
-        return ma1 - ma2 > 0
-
-        
-    def run(self):
-        previous = self.whether_increasing()
-        print(f'Start With {previous} increasing status')
-        status = 'Start'
-        order_i = 0
-        iter = 0
-        self.e_long()
-        status = 'Long'
-        while order_i < self.order_num:
-            increasing1 = self.whether_increasing()
-            if iter%10 == 0:
-                print(f"{iter}) Increasing? {increasing1}, Increased previous? {previous}")
-
-            if not previous and increasing1: # 상승하기시작
-                time.sleep(self.tf_*30)
-                increasing1 = self.whether_increasing()
-                if not previous and increasing1:
-
-                    if status == 'Start':
-                        self.e_long()
-                        print("Long stance")
-                    elif status == 'Short':
-                        self.e_long()
-                        self.e_long()
-                        print("Short -> Long stance")
-                    else:
-                        print('Error....', status)
-                    status = 'Long'
-                    order_i+= 1
-                    self.last_order = iter
-            elif previous and not increasing1: # 떨어지기 시작
-                time.sleep(self.tf_*30)
-                increasing1 = self.whether_increasing()
-                if previous and not increasing1:
-                    
-                    if status == 'Start':
-                        self.e_short()
-                        print("Short stance")
-                    elif status == 'Long':
-                        self.e_short()
-                        self.e_short()
-                        print("Long -> Short stance")
-                    else:
-                        print('Error....', status)
-                    status = 'Short'
-                    order_i += 1
-                    self.last_order = iter
-            previous = increasing1
-
-            if order_i % 10 == 0 and iter%100 == 0:
-                print(order_i, "-th order")
-                self.inquire_my_wallet(justshow=self.sym)
-            time.sleep(2)
-            iter += 1
-            
-        if status == "Short":
-            self.e_long()
-        elif status == "Long":
-            self.e_short()
-        else:
-            print("Error!!!", status)
-            
     def get_ms(self):
         df = self.past_data(sym=self.sym, tf=self.tf, limit=self.limit)
         m1 = df['close'].rolling(window=self.wins[0]).mean()[-self.n:]
@@ -213,6 +141,77 @@ class Trader():
         m3 = df['close'].rolling(window=self.wins[2]).mean()[-self.n:]
         m4 = df['close'].rolling(window=self.wins[3]).mean()[-self.n:]
         return m1, m2, m3, m4
+
+    def run0612(self):
+        status = None
+        transactions = []
+        tr = {}
+        order_i = 0
+        iter = 0
+        while order_i < self.order_num:
+            i = -1
+            m1, m2, m3, m4 = self.get_ms()
+            if not status:
+                m2on3 = m2[i] - m3[i] > 0    
+                p_m2on3 = m2[i-1] - m3[i-1] > 0
+                m4_increasing = m4[i] - m4[i-1] > 0
+                m23_start_inc = not p_m2on3 and m2on3
+                m23_start_dec = p_m2on3 and not m2on3
+                
+                if m23_start_inc and m4_increasing:
+                    status = "Long"
+                    self.e_long()
+                elif m23_start_dec and not m4_increasing:
+                    status = "Short"
+                    self.e_short()
+                
+                if status:
+                    tr['ent'] = [i, m1[i]]
+                    ent_price = m1[i]                
+
+                    positionamt = 0
+                    start = time.time()
+                    waiting = 0
+                    while positionamt == 0 and waiting < self.tf_*60:
+                        waiting = time.time() - start
+                        balance = self.binance.fetch_balance()
+                        positions = balance['info']['positions']
+
+                        for position in positions:
+                            if position["symbol"] == self.sym.replace("/", ""):
+                                positionamt = position['positionAmt']
+                    if positionamt == 0:
+                        resp = self.binance.cancel_order(
+                                id=self.order_id,
+                                symbol=self.sym
+                            )
+                    self.inquire_my_wallet(justshow=self.sym)
+
+            else :
+                p = 2*(-0.5+int(status=="Long"))
+                curr_pnl = self.lev*p*(m1[i] - ent_price)/ent_price*100
+                if iter % 2000 == 0:
+                    print("curr_pnl: ", curr_pnl)
+                iter += 1
+                if curr_pnl < self.max_loss or\
+                (
+                    curr_pnl > self.min_profit and\
+                    timing2_close(status, m2, m3, m4, i)
+                ):
+    #                 print(curr_pnl, status)
+                    if status == 'Long':
+                        self.e_short()
+                    else:
+                        self.e_long()
+                        
+                    tr['close'] = [i, m1[i]]
+                    tr = close(status, tr)
+                    transactions.append(tr)
+                    tr = {}
+                    status = None
+        with open("transactions.txt", 'w') as f:
+            f.write(transactions)
+
 
     def run0531(self):
         status = None
@@ -261,12 +260,13 @@ class Trader():
 
             else :
                 p = 2*(-0.5+int(status=="Long"))
-                curr_pnl = p*(m1[i] - ent_price)/ent_price*100
-                if iter % 200 == 0:
+                curr_pnl = self.lev*p*(m1[i] - ent_price)/ent_price*100
+                if iter % 2000 == 0:
                     print("curr_pnl: ", curr_pnl)
-                if curr_pnl < -0.5 or\
+                iter += 1
+                if curr_pnl < self.max_loss or\
                 (
-                    curr_pnl > 0.2 and\
+                    curr_pnl > self.min_profit and\
                     timing2_close(status, m2, m3, m4, i)
                 ):
     #                 print(curr_pnl, status)
