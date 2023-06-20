@@ -34,28 +34,54 @@ class Trader():
                 'defaultType': 'future'
             }
         })
-        self.sym = 'ETH/USDT'
+        self.sym = 'BNB/USDT'
         self.order_num = 30
-        self.tf = '3m'
+        self.tf = '1m'
         self.tf_ = int(self.tf[:-1])
-        self.n = 5       # 걍 3보다 크면 됨
         self.lev = 5
+        self.set_lev = True  # 기존거 가져오는경우 다시 set하면 에러나기때문
         self.amount = 0.01
-        self.wins = [1, 2, 11, 17]
-        self.limit = self.wins[-1]*5    # for past_data
-        self.max_loss = -3              # 마이너스인거 확인
-        self.min_profit = 0.5
+        self.wins = [1, 11, 20, 40]
+        self.limit = self.wins[-1]*10    # for past_data
+        self.max_loss = -20             # 마이너스인거 확인
+        self.min_profit = 5
         print(f"{'*'*50}\ntf: {self.tf}  lev:{self.lev}  amt: {self.amount}  inf: {self.wins}\n{'*'*50}  [[{self.max_loss}~{self.min_profit}]]")
         self.binance.load_markets()
-        self.inquire_my_wallet()
         self.last_order = 0
-        self.status = 0
+        self.inquire_curr_info(init=True)
+        
 
     ## 현재 정보 조회
-    def inquire_curr_info(self, sym="BTC/USDT"):
-        info = self.binance.fetch_ticker(sym)
-        print(info)
-        
+    def inquire_curr_info(self, init=False):
+        balance = self.binance.fetch_balance()
+        positions = balance['info']['positions']
+
+        for position in positions:
+        #     print(position)
+            if position["symbol"] == self.sym.replace("/", ""):
+                amt = float(position['positionAmt'])
+                if amt == 0:
+                    self.status = None
+                    return 0
+                pnl = self.get_curr_pnl(self.sym.replace("/", ""))
+                if init:
+                    self.init_ckpt(position, pnl)
+                    self.set_lev = False
+
+
+    def init_ckpt(self, position, pnl):
+        amt = float(position['positionAmt'])
+        self.lev = float(position['leverage'])
+        self.amount = amt
+        print("Current PNL:", pnl, "% Leverage: ", self.lev, ' Amt: ', amt)
+        if amt < 0:
+            self.status = 'Short'
+        elif amt > 0:
+            self.status = 'Long'
+        else:
+            print("뭔가이상해..")
+            self.status = None
+
     def inquire_curr_price(self, sym="BTC/USDT"):
         info = self.binance.fetch_ticker(sym)
         return info['average']
@@ -72,27 +98,6 @@ class Trader():
         df.set_index('datetime', inplace=True)
         return df
 
-    def inquire_my_wallet(self):
-        wallet = self.binance.fetch_balance(params={"type": "future"})
-        print("\nMy wallet: ")
-        for k in ['used', 'total']:
-            for s in list(wallet[k].keys()):
-                if wallet[k][s]>0:
-                    print(f"{k} {s}: {wallet[k][s]}")
-        
-        positions = wallet['info']['positions']
-
-        symbol = []
-        size = []
-        pnl = []
-        for position in positions:
-            if position['initialMargin'] != '0':
-                symbol.append(position['symbol'])
-                size.append(position['notional'])
-                pnl.append(float(position['unrealizedProfit']))
-        
-        for i in range(len(symbol)):
-            print(f"[{symbol[i]}] size: {size[i]}  pnl: {pnl[i]}%\n")
 
 
     def get_curr_pnl(self, sym):
@@ -100,7 +105,7 @@ class Trader():
         positions = wallet['info']['positions']
         for pos in positions:
             if pos['symbol'] == sym:
-                pnl = float(pos['unrealizedProfit'])/float(pos['positionAmt'])/float(pos['entryPrice'])*100*float(pos['leverage'])
+                pnl = float(pos['unrealizedProfit'])/abs(float(pos['positionAmt']))/float(pos['entryPrice'])*100*float(pos['leverage'])
                 return pnl
 
 
@@ -110,15 +115,15 @@ class Trader():
         price = self.inquire_curr_price(self.sym)
         # price = price*(1-a)
         market = self.binance.markets[self.sym]
-
-        resp = self.binance.set_leverage(
-            symbol=market['id'],
-            leverage=self.lev,
-        )
+        if self.set_lev:
+            resp = self.binance.set_leverage(
+                symbol=market['id'],
+                leverage=self.lev,
+            )
         params = {'timeInForce': 'IOC',}
         order = self.binance.create_market_buy_order(
             symbol=self.sym,
-            amount=self.amount,
+            amount=np.abs(self.amount),
             # price=price,
             # params=params,
             )
@@ -131,15 +136,16 @@ class Trader():
         self.binance.load_markets()
         price = self.inquire_curr_price(self.sym)
         market = self.binance.markets[self.sym]
+        if self.set_lev:
+            resp = self.binance.set_leverage(
+                symbol=market['id'],
+                leverage=self.lev,
+            )
 
-        resp = self.binance.set_leverage(
-            symbol=market['id'],
-            leverage=self.lev,
-        )
         params = {'timeInForce': 'IOC',}
         order = self.binance.create_market_sell_order(
             symbol=self.sym,
-            amount=self.amount,
+            amount=np.abs(self.amount),
             # price=price,
             # params=params,
             )
@@ -148,79 +154,65 @@ class Trader():
             print("\n\n\n!It's not post-only order!")
         print(f'Posted [price: {price}]')
 
-    def is_remaining_order(self):        
-        balance = self.binance.fetch_balance()
-        positions = balance['info']['positions']
-        for position in positions:
-            if position["symbol"] == self.sym.replace("/", ""):
-                print(position)
-                return True
-        return False
 
     def get_ms(self):
         df = self.past_data(sym=self.sym, tf=self.tf, limit=self.limit)
-        m1 = df['close'].rolling(window=self.wins[0]).mean()[-self.n:]
-        m2 =  df['close'].rolling(window=self.wins[1]).mean()[-self.n:]
-        m3 = df['close'].rolling(window=self.wins[2]).mean()[-self.n:]
-        m4 = df['close'].rolling(window=self.wins[3]).mean()[-self.n:]
+        m1 = df['close'].rolling(window=self.wins[0]).mean()
+        m2 =  df['close'].rolling(window=self.wins[1]).mean()
+        m3 = df['close'].rolling(window=self.wins[2]).mean()
+        m4 = df['close'].rolling(window=self.wins[3]).mean()
         return m1, m2, m3, m4
 
     def run0612(self):
         status = self.status
+        print("\nStarting status: ", status)
         transactions = []
         tr = {}
+        tr['ent'] = [0, 0]
         order_i = 0
         iter = 0
+        cond1, cond2 = 0.2, 0.1
         while order_i < self.order_num:
             i = -1
             m1, m2, m3, m4 = self.get_ms()
+
             if not status:
-                m2on3 = m2[i] - m3[i] > 0    
-                p_m2on3 = m2[i-1] - m3[i-1] > 0
-                m4_increasing = m4[i] - m4[i-1] > 0
-                m23_start_inc = not p_m2on3 and m2on3
-                m23_start_dec = p_m2on3 and not m2on3
+            
+                turnning_shape = whether_turnning(m2, m3, m4, ref=0.001*0.01, ref2=0.01*0.01)  # u or n or None
+                # val = self.get_curr_cond(m1)
+                val = self.get_curr_conds()
+                pre_cond = np.mean(val[1:])
                 
-                if m23_start_inc and m4_increasing:
+                if turnning_shape == 'u' and val[0] < -cond1 and pre_cond < -cond2:
                     status = "Long"
                     self.e_long()
-                elif m23_start_dec and not m4_increasing:
+                elif turnning_shape == 'n' and val[0] > cond1 and pre_cond > cond2:
                     status = "Short"
                     self.e_short()
                 
                 if status:
                     tr['ent'] = [i, m1[i]]
-                    ent_price = m1[i]                
-
-                    positionamt = 0
-                    start = time.time()
-                    waiting = 0
-                    while positionamt == 0 and waiting < self.tf_*60:
-                        waiting = time.time() - start
-                        balance = self.binance.fetch_balance()
-                        positions = balance['info']['positions']
-
-                        for position in positions:
-                            if position["symbol"] == self.sym.replace("/", ""):
-                                positionamt = position['positionAmt']
-                    if positionamt == 0:
-                        resp = self.binance.cancel_order(
-                                id=self.order_id,
-                                symbol=self.sym
-                            )
-                    self.inquire_my_wallet(justshow=self.sym)
 
             else :
                 curr_pnl = self.get_curr_pnl(self.sym.replace("/", ""))
+                curr_cond = get_curr_cond(m1)
                 if iter % 2000 == 0:
-                    print("curr_pnl: ", curr_pnl)
+                    print("curr_pnl: ", round(curr_pnl, 5), "%")
                 iter += 1
-                if curr_pnl < self.max_loss or\
+                if curr_pnl < self.max_loss \
+                    or\
                 (
-                    curr_pnl > self.min_profit and\
-                    timing2_close(status, m2, m3, m4, i)
+                    curr_pnl > self.min_profit \
+                        and\
+                    timing2_close(status, m2, m3, m4)
+                        and\
+                    (
+                        (curr_cond < cond1 and status == "Short") \
+                            or\
+                        (curr_cond > cond1 and status == "Long")
+                    )
                 ):
-    #                 print(curr_pnl, status)
+                    print(curr_pnl, status)
                     if status == 'Long':
                         self.e_short()
                     else:
@@ -231,80 +223,64 @@ class Trader():
                     transactions.append(tr)
                     tr = {}
                     status = None
-        with open("transactions.txt", 'w') as f:
-            f.write(transactions)
 
+                    with open("transactions.txt", 'w') as f:
+                        f.write(transactions)
+            time.sleep(2)
 
-    def run0531(self):
-        status = None
-        transactions = []
-        tr = {}
-        order_i = 0
-        iter = 0
-        while order_i < self.order_num:
-            i = -1
-            m1, m2, m3, m4 = self.get_ms()
-            if not status:
-                m2on3 = m2[i] - m3[i] > 0    
-                p_m2on3 = m2[i-1] - m3[i-1] > 0
-                m4_increasing = m4[i] - m4[i-1] > 0
-                m23_start_inc = not p_m2on3 and m2on3
-                m23_start_dec = p_m2on3 and not m2on3
-                
-                if m23_start_inc and m4_increasing:
-                    status = "Long"
-                    self.e_long()
-                elif m23_start_dec and not m4_increasing:
-                    status = "Short"
-                    self.e_short()
-                
-                if status:
-                    tr['ent'] = [i, m1[i]]
-                    ent_price = m1[i]                
+    def get_curr_conds(self, tfs= ['1m', '3m', '5m', '15m']):
+        pos_val = []
+        for tf in tfs:
+            # tf = ex) '1m'
+            df = self.past_data(self.sym, tf, limit=1500)
+            m = df['close'].rolling(window=1).mean()
+            v = get_curr_cond(m)
+            pos_val.append(v)
+        return pos_val
 
-                    positionamt = 0
-                    start = time.time()
-                    waiting = 0
-                    while positionamt == 0 and waiting < self.tf_*60:
-                        waiting = time.time() - start
-                        balance = self.binance.fetch_balance()
-                        positions = balance['info']['positions']
+def minmax(m):
+    m = (m - m.min())/(m.max() - m.min())
+    return m
 
-                        for position in positions:
-                            if position["symbol"] == self.sym.replace("/", ""):
-                                positionamt = position['positionAmt']
-                    if positionamt == 0:
-                        resp = self.binance.cancel_order(
-                                id=self.order_id,
-                                symbol=self.sym
-                            )
-                    self.inquire_my_wallet(justshow=self.sym)
+def whether_turnning(m2, m3, m4, ref=0.001*0.01, ref2=0.02*0.01):
+    i = -1
+    curr_m2on3 = (m2[i] - m3[i])/m2[i] > ref
+    curr_m4 = np.abs((m4[i] - m4[i-2])/m4[i])
+    pre_m4 = np.abs((m4[i-2] - m4[i-4])/m4[i-2])
+    p_m2on3 = []
+    p_m2under3 = []
+    m4incs = []
+    m4decs = []
+    for pre in range(1, 10):
+        m2on3 = (m2[i-pre] - m3[i-pre])/m2[i-pre] > ref
+        m2under3 = (m2[i-pre] - m3[i-pre])/m2[i-pre] < -ref
+        m4inc = (m4[i] - m4[i-pre])/m4[i] > 0
+        m4dec = (m4[i] - m4[i-pre])/m4[i] < 0
+        p_m2on3.append(m2on3)
+        p_m2under3.append(m2under3)
+        m4incs.append(m4inc)
+        m4decs.append(m4dec)
 
-            else :
-                p = 2*(-0.5+int(status=="Long"))
-                curr_pnl = self.lev*p*(m1[i] - ent_price)/ent_price*100
-                if iter % 2000 == 0:
-                    print("curr_pnl: ", curr_pnl)
-                iter += 1
-                if curr_pnl < self.max_loss or\
-                (
-                    curr_pnl > self.min_profit and\
-                    timing2_close(status, m2, m3, m4, i)
-                ):
-    #                 print(curr_pnl, status)
-                    if status == 'Long':
-                        self.e_short()
-                    else:
-                        self.e_long()
-                        
-                    tr['close'] = [i, m1[i]]
-                    tr = close(status, tr)
-                    transactions.append(tr)
-                    tr = {}
-                    status = None
-        with open("transactions.txt", 'w') as f:
-            f.write(transactions)
+    p_m2on3 = np.all(p_m2on3)
+    p_m2under3 = np.all(p_m2under3)
+    m4_increasing = np.all(m4incs)
+    m4_decreasing = np.all(m4decs)
+    
+    m23_start_inc = p_m2under3 and curr_m2on3 
+    m23_start_dec = p_m2on3 and not curr_m2on3
+            
+    if curr_m4 <pre_m4 and curr_m4 < ref2:
+        if m23_start_inc and m4_decreasing:
+            return 'u'
+        elif m23_start_dec and m4_increasing:
+            return 'n'
+    return None
 
+def get_curr_cond(m):
+    mm = minmax(m)
+    m_mean = np.mean(mm)
+    return mm[-1] - m_mean
+    
 def show_total_pnl(transactions):
     pnls=[]
     for tr in transactions:
@@ -321,12 +297,14 @@ def show_total_pnl(transactions):
 4. 0.1% 이상 손실이면 팔기
 """
 
-def timing2_close(status, m2, m3, m4, i):
-    if i < 2:
-        return False
-    m4_inc1 = m4[i-1] - m4[i-2] 
+def timing2_close(status, m2, m3, m4, ref=0):
+    i = -1
+    m4_inc1 = m4[i-2] - m4[i-3] 
     m4_inc2 = m4[i] - m4[i-1] 
-    m4_turn = m4_inc1 * m4_inc2 < 0
+    if status == "Long": # n
+        m4_turn = m4_inc1>ref and m4_inc2 <ref
+    else:
+        m4_turn = m4_inc1<ref and m4_inc2 >ref
     return m4_turn
 
 def close(pos, tr, lev=1):
@@ -340,4 +318,4 @@ def close(pos, tr, lev=1):
     return tr
 if __name__ == "__main__":
     trader = Trader()
-    trader.run0531()
+    trader.run0612()
