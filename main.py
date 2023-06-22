@@ -38,9 +38,9 @@ class Trader():
         self.order_num = 30
         self.tf = '1m'
         self.tf_ = int(self.tf[:-1])
-        self.lev = 5
+        self.lev = 10
         self.set_lev = True  # 기존거 가져오는경우 다시 set하면 에러나기때문
-        self.amount = 0.01
+        self.amount = 10
         self.wins = [1, 11, 20, 40]
         self.limit = self.wins[-1]*10    # for past_data
         self.max_loss = -20             # 마이너스인거 확인
@@ -179,10 +179,12 @@ class Trader():
             if not status:
             
                 turnning_shape = whether_turnning(m2, m3, m4, ref=0.001*0.01, ref2=0.01*0.01)  # u or n or None
-                # val = self.get_curr_cond(m1)
                 val = self.get_curr_conds()
                 pre_cond = np.mean(val[1:])
-                
+
+                if iter % 50 == 0:
+                    print("turnning_shape: ", turnning_shape, "  curr cond:", round(val[0], 3), "  long cond:", list(map(lambda x: round(x, 2), val[1:])))
+
                 if turnning_shape == 'u' and val[0] < -cond1 and pre_cond < -cond2:
                     status = "Long"
                     self.e_long()
@@ -196,9 +198,8 @@ class Trader():
             else :
                 curr_pnl = self.get_curr_pnl(self.sym.replace("/", ""))
                 curr_cond = get_curr_cond(m1)
-                if iter % 2000 == 0:
-                    print("curr_pnl: ", round(curr_pnl, 5), "%")
-                iter += 1
+                if iter % 50 == 0:
+                    print("curr_pnl: ", round(curr_pnl, 5), "%,  curr cond:", curr_cond)
                 if curr_pnl < self.max_loss \
                     or\
                 (
@@ -227,6 +228,7 @@ class Trader():
                     with open("transactions.txt", 'w') as f:
                         f.write(transactions)
             time.sleep(2)
+            iter += 1
 
     def get_curr_conds(self, tfs= ['1m', '3m', '5m', '15m']):
         pos_val = []
@@ -299,7 +301,7 @@ def show_total_pnl(transactions):
 
 def timing2_close(status, m2, m3, m4, ref=0):
     i = -1
-    m4_inc1 = m4[i-2] - m4[i-3] 
+    m4_inc1 = m4[i-3] - m4[i-4] 
     m4_inc2 = m4[i] - m4[i-1] 
     if status == "Long": # n
         m4_turn = m4_inc1>ref and m4_inc2 <ref
