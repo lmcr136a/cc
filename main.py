@@ -186,7 +186,7 @@ class Trader():
         tr['ent'] = [0, 0]
         order_i = 0
         iter = 0
-        cond1, cond2 = 0.2, 0.1
+        cond1, cond2 = 0.1, 0.1
         while order_i < self.order_num:
             i = -1
             m1, m2, m3, m4 = self.get_ms()
@@ -342,22 +342,44 @@ def whether_turnning2(m2, m3, m4, ref=0.001, ref2=0.002):
     curr_m2_undr_m3 = curr_diff < 0
 
     r = 3
-    # concave = np.all(dd_m2[-r:] < 0) and np.all(dd_m3[-r:] < 0)  # 오목
-    # convex = np.all(dd_m2[-r:] > 0) and np.all(dd_m3[-r:] > 0)  # 볼록
+    conref = 0.0009
+    conref2 = 0.0007
+    m2_concave = np.mean(dd_m2[-r:]) > conref
+    m3_concave = np.mean(dd_m3[-r:]) > conref2
+    hueck = dd_m2[-1] > conref
 
-    concave = np.mean(dd_m2[-r:]) > 0.009 and np.mean(dd_m3[-r:]) > 0.007 and dd_m2[-1] > 0.009
-    convex = np.mean(dd_m2[-r:]) < -0.009 and np.mean(dd_m3[-r:]) < -0.007 and dd_m2[-1] < 0.009
+    m2_convex = np.mean(dd_m2[-r:]) < -conref
+    m3_convex = np.mean(dd_m3[-r:]) < -conref2
+    hueck_ = dd_m2[-1] < -conref
+
+    concave = m2_concave and m3_concave and hueck
+    convex = m2_convex and m3_convex and hueck_
     str = ''
-    if convex:
-        str += '볼록'
-    elif concave:
-        str += '오목'
-    
-    if curr_m2_on_m3:
-        str += ' m2가 위에'
-    elif curr_m2_undr_m3:
-        str += ' m3가 위에'
-    print(str)
+    print_ = True
+    if print_:
+        if convex:
+            str += '볼록'
+        if concave:
+            str += '오목'
+        if curr_m2_on_m3:
+            str += ' m2가 위에'
+        if curr_m2_undr_m3:
+            str += ' m3가 위에'
+
+        str += " | m2 "
+        if m2_convex:
+            str += '볼록'
+        if m2_concave:
+            str += '오목'
+        if hueck or hueck_:
+            str += '획'
+
+        str += " | m3 "
+        if m3_convex:
+            str += '볼록'
+        if m3_concave:
+            str += '오목'
+        print(str)
 
     if prev_m2_undr_m3 and curr_m2_on_m3 and concave:
         return 'u'
