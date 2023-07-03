@@ -1,0 +1,1 @@
+[{'ent': [0, 0], 'close': [-1, 231.26], 'position': 'Long', 'pnl': 'inf%'}]
