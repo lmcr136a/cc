@@ -45,12 +45,12 @@ class Trader():
         self.lev = 20
         self.wins = [1, 11, 20, 40]
         self.max_loss = max(-2*self.lev, -20)   # 마이너스인거 확인
-        self.min_profit = 0.5*self.lev          # 20 일때 10%
+        self.min_profit = 0.25*self.lev          # 20 일때 5%
         
         # 갑자기 올랐을때/ 떨어졌을 때 satisfying_profit 넘으면 close
         self.satisfying_profit = 0.6*self.lev   # 20 일때 12%
 
-
+        self.time_interval = 2
         self.tf_ = int(self.tf[:-1])
         self.set_lev = True                     # 기존거 가져오는경우 다시 set하면 에러나기때문
         self.limit = self.wins[-1]*10           # for past_data
@@ -184,11 +184,10 @@ class Trader():
         transactions = []
         tr = {}
         tr['ent'] = [0, 0]
-        order_i = 0
         iter = 0
         cond1, cond2 = 0.1, 0.1
-        while order_i < self.order_num:
-            i = -1
+        self.anxious = 1
+        while len(transactions) < self.order_num:
             m1, m2, m3, m4 = self.get_ms()
 
             if not status:
@@ -208,15 +207,20 @@ class Trader():
                     self.e_short()
                 
                 if status:
-                    tr['ent'] = [i, m1[i]]
+                    tr['ent'] = [iter, m1[-1]]
 
             else :
                 curr_pnl, profit = self.get_curr_pnl(self.sym.replace("/", ""))
                 curr_cond = get_curr_cond(m1, period=500)
-                
-                print("PRICE: ", m1[-1], f" PNL: {profit} ({round(curr_pnl, 2)}%), COND:", round(curr_cond, 2))
-
+                howmuchtime = iter - tr['ent'][0]
                 suddenly = isitsudden(m1, status)
+                print(f"{howmuchtime}] PRICE: {m1[-1]} PNL: {profit} ({round(curr_pnl, 2)}%), COND: {round(curr_cond, 2)} SUD: {suddenly}")
+                
+                # 시간이 오래 지날수록 욕심을 버리기
+                if (howmuchtime)%(2*3600/self.time_interval) == 0: # 1시간
+                    self.anxious *= 0.8
+                    self.anxious = max(self.anxious, self.min_profit)
+
                 if curr_pnl < self.max_loss \
                     or\
                 (
@@ -231,7 +235,7 @@ class Trader():
                     )
                 )\
                     or\
-                (suddenly and curr_pnl > self.satisfying_profit):
+                (suddenly and curr_pnl > self.satisfying_profit*self.anxious):
                     print("!!!")
                     print(curr_pnl, status, suddenly)
                     if status == LONG:
@@ -239,15 +243,15 @@ class Trader():
                     else:
                         self.e_long()
                         
-                    tr['close'] = [i, m1[i]]
-                    tr = close(status, tr)
+                    tr['close'] = [iter, m1[-1]]
+                    tr = close(status, tr, curr_pnl)
                     transactions.append(tr)
                     tr = {}
                     status = None
-
+                    self.anxious = 1
                     with open("transactions.txt", 'w') as f:
                         f.write(str(transactions))
-            time.sleep(2)
+            time.sleep(self.time_interval)
             iter += 1
 
     def get_curr_conds(self, tfs= ['1m', '3m', '5m', '30m'], limit=180):
@@ -262,9 +266,9 @@ class Trader():
             pos_val.append(v)
         return pos_val
 
-def isitsudden(m1, status, ref=0.12):
+def isitsudden(m1, status, ref=0.08):
     now = m1[-1]
-    prev = m1[-3]
+    prev = m1[-2]
     percent = (now - prev)/prev*100
     if status == LONG and percent > ref:
         return True
@@ -413,14 +417,12 @@ def timing2_close(status, m2, m3, m4, ref=0):
         m4_turn = m4_inc1<ref and m4_inc2 >ref
     return m4_turn
 
-def close(pos, tr, lev=1):
+def close(pos, tr, profit, lev=1):
     p=1
     if pos == SHORT:
         p = -1
     tr['position'] = pos
-    profit = p*(tr['close'][1] - tr['ent'][1])/tr['ent'][1] # 1 means price
-    profit = 100*profit - 0.08
-    tr['pnl'] = str(round(lev*profit, 4))+"%"
+    tr['pnl'] = str(round(profit, 4))+"%"
     return tr
 
 
