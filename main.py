@@ -45,7 +45,7 @@ class Trader():
         self.tf = '1m'
         self.lev = 20
         self.wins = [1, 11, 20, 40]
-        self.max_loss = max(-2*self.lev, -20)   # 마이너스인거 확인
+        self.max_loss = max(-2*self.lev, -30)   # 마이너스인거 확인
         self.min_profit = 0.25*self.lev          # 20 일때 5%
         
         # 갑자기 올랐을때/ 떨어졌을 때 satisfying_profit 넘으면 close
@@ -60,21 +60,34 @@ class Trader():
         self.inquire_curr_info(init=True)
 
         price = float(self.inquire_curr_price())
-        self.amount = np.floor(self.wallet_usdt*self.lev/price*0.9)
+        if self.set_lev:  # 기존꺼 가져오는 경우가 아니라 걍 첨에 시작하는 경우
+            self.amount = np.floor(self.wallet_usdt*self.lev/price*0.9)
         
         print(f"{'*'*50}\nwallet:{round(self.wallet_usdt, 3)}  tf: {self.tf}  lev:{self.lev}  \
 \namt: {self.amount}  inf: {self.wins}\n{'*'*50}  [[{self.max_loss}~{self.min_profit}]]")
-        
+
+        market_status = bull_or_bear(self.past_data(sym=self.sym, tf='2h', limit=50))
+        print(f"{market_status} MARKET")
+        self.cond1 = 0.2
+        self.pre_cond = 0.1
+        self.buying_cond = self.cond1
+        if market_status == "BULL":     # 상승장이면
+            self.buying_cond = -0.3      # 원래 -buying_cond 보다 낮아야 살 수 있던걸 바꿔줌
+            self.pre_cond = -0.75
+        elif market_status == "BEAR":   # 하락장이면
+            self.buying_cond = -0.3     # 원래 buying_cond 보다 높아야 살 수 있던걸 바꿔줌
+            self.pre_cond = -0.75
 
     ## 현재 정보 조회
     def inquire_curr_info(self, init=False):
         balance = self.binance.fetch_balance()
         positions = balance['info']['positions']
         
+        log_wallet_history(balance)
         # USDT
         for asset in balance['info']['assets']:
             if asset['asset'] == 'USDT':
-                self.wallet_usdt = float(asset['walletBalance'])
+                self.wallet_usdt = float(asset['availableBalance'])
 
         for position in positions:
         #     print(position)
@@ -98,9 +111,6 @@ class Trader():
             self.status = SHORT
         elif amt > 0:
             self.status = LONG
-        else:
-            print("뭔가이상해..")
-            self.status = None
 
     def inquire_curr_price(self):
         info = self.binance.fetch_ticker(self.sym)
@@ -127,29 +137,22 @@ class Trader():
                 pnl = float(pos['unrealizedProfit'])/abs(float(pos['positionAmt']))/float(pos['entryPrice'])*100*float(pos['leverage'])
                 return round(pnl,2), round(float(pos['unrealizedProfit']), 2)
 
-    def e_long(self):  # 오를것이다
+    def e_long(self, close=False):  # 오를것이다
         self.binance.load_markets()
         price = self.inquire_curr_price()
-        # price = price*(1-a)
         market = self.binance.markets[self.sym]
         if self.set_lev:
             resp = self.binance.set_leverage(
                 symbol=market['id'],
                 leverage=self.lev,
             )
-        params = {'timeInForce': 'IOC',}
         order = self.binance.create_market_buy_order(
             symbol=self.sym,
             amount=np.abs(self.amount),
-            # price=price,
-            # params=params,
             )
         self.order_id = order['id']
-        # if not order["postOnly"]:
-            # print("\n\n\n!It's not post-only order!")
-        print(f'Posted [price: {price}]')
         
-    def e_short(self):  # 내릴것이다
+    def e_short(self, close=False):  # 내릴것이다
         self.binance.load_markets()
         price = self.inquire_curr_price()
         market = self.binance.markets[self.sym]
@@ -158,18 +161,11 @@ class Trader():
                 symbol=market['id'],
                 leverage=self.lev,
             )
-
-        params = {'timeInForce': 'IOC',}
         order = self.binance.create_market_sell_order(
             symbol=self.sym,
             amount=np.abs(self.amount),
-            # price=price,
-            # params=params,
             )
         self.order_id = order['id']
-        # if not order["postOnly"]:
-        #     print("\n\n\n!It's not post-only order!")
-        print(f'Posted [price: {price}]')
 
     def get_ms(self):
         df = self.past_data(sym=self.sym, tf=self.tf, limit=self.limit)
@@ -186,8 +182,7 @@ class Trader():
         tr = {}
         tr['ent'] = [0, 0]
         iter = 0
-        cond1, cond2 = 0.2, 0.1
-        self.anxious = 0.0001
+        self.anxious = 1
         while len(transactions) < self.order_num:
             m1, m2, m3, m4 = self.get_ms()
 
@@ -200,10 +195,10 @@ class Trader():
                 # if iter % 50 == 0:
                 print('PRICE:', m1[-1], " SHAPE: ", turnning_shape, ' CONDS:', list(map(lambda x: round(x, 2), val)))
 
-                if turnning_shape == 'u' and val[0] < -cond1 and pre_cond < -cond2:
+                if turnning_shape == 'u' and val[0] < -self.buying_cond and pre_cond < -self.pre_cond:
                     status = LONG
                     self.e_long()
-                elif turnning_shape == 'n' and val[0] > cond1 and pre_cond > cond2:
+                elif turnning_shape == 'n' and val[0] > self.buying_cond and pre_cond > self.pre_cond:
                     status = SHORT
                     self.e_short()
                 
@@ -215,12 +210,12 @@ class Trader():
                 curr_cond = get_curr_cond(m1, period=500)
                 howmuchtime = iter - tr['ent'][0]
                 suddenly = isitsudden(m1, status)
-                print(f"{howmuchtime}] PRICE: {m1[-1]} PNL: {profit} ({round(curr_pnl, 2)}%), COND: {round(curr_cond, 2)} SUD: {suddenly}")
+                print(f"{howmuchtime}] PRICE: {m1[-1]} PNL: {profit} ({round(curr_pnl, 2)}%), COND: {round(curr_cond, 2)} SAT_P: {self.satisfying_profit*self.anxious}")
                 
                 # 시간이 오래 지날수록 욕심을 버리기
                 if (howmuchtime)%(2*3600/self.time_interval) == 0: # 1시간
                     self.anxious *= 0.8
-                    self.anxious = max(self.anxious, 1)
+                    self.anxious = max(self.anxious, 1.2/self.satisfying_profit)
 
                 if curr_pnl < self.max_loss \
                     or\
@@ -230,9 +225,9 @@ class Trader():
                     timing2_close(status, m2, m3, m4)
                         and\
                     (
-                        (curr_cond < cond1 and status == SHORT) \
+                        (curr_cond < self.cond1 and status == SHORT) \
                             or\
-                        (curr_cond > cond1 and status == LONG)
+                        (curr_cond > self.cond1 and status == LONG)
                     )
                 )\
                     or\
@@ -240,9 +235,9 @@ class Trader():
                     print("!!!")
                     print(curr_pnl, status, suddenly)
                     if status == LONG:
-                        self.e_short()
+                        self.e_short(close=True)
                     else:
-                        self.e_long()
+                        self.e_long(close=True)
                         
                     tr['close'] = [iter, m1[-1]]
                     tr = close(status, tr, curr_pnl)
@@ -252,6 +247,11 @@ class Trader():
                     self.anxious = 1
                     with open("transactions.txt", 'w') as f:
                         f.write(str(transactions))
+                        
+
+                    price = float(self.inquire_curr_price())
+                    self.amount = np.floor(self.wallet_usdt*self.lev/price*0.9)
+
             time.sleep(self.time_interval)
             iter += 1
 
@@ -278,19 +278,48 @@ def isitsudden(m1, status, ref=0.08):
     return False
 
 
+def log_wallet_history(balance):
+    wallet_info = np.load('wallet_log.npy')
+    wallet_info = np.concatenate(
+                        [wallet_info, 
+                        [[time.time()], [float(balance['info']['totalWalletBalance'])]]],
+                        axis=1
+                        )  ## Date
+    np.save('wallet_log.npy', wallet_info)
+    plt.figure()
+    plt.plot(wallet_info[0], wallet_info[1])
+    plt.savefig("wallet_log.png")
+    plt.close()
+
+# TODO: 
+# 심볼 탐색후 선택
+
+
+def bull_or_bear(df):  # 상승장인지 하락장인지?
+    # df: 2H time frame, 3일간의 흐름을 본다! 길이 12*3
+    tfnum = 24/2  # 하루의 막대개수
+    date = 3
+    m = df['close'][-int(tfnum*date):]
+    blocks = [0, int(tfnum*date-tfnum), int(tfnum*date-0.5*tfnum)]
+    rising = []
+    for b in blocks:
+        for i in range(1, len(m)-b):
+            rising.append((m[b+i] - m[b])/m[b]*100)
+    rising_coef = np.mean(rising)
+    if rising_coef > 2:
+        return "BULL"
+    elif rising_coef < -1.5:
+        return "BEAR"
+    else:
+        return "~-~-~"
+    
+
+
+
 def minmax(m):
     m = (m - m.min())/(m.max() - m.min())
     return m
-"""
-##### u
-m2 상승중
-m2가 m3보다 높아짐
-오목
-##### n
-m2 decreasing
-m3 becomes over on m2
-볼록
-"""
+
 def whether_turnning(m2, m3, m4, ref=0.001, ref2=0.002):
     i = -1
     curr_m2on3 = (m2[i] - m3[i])/m2[i] > ref
@@ -427,14 +456,37 @@ def close(pos, tr, profit, lev=1):
     return tr
 
 
+
+def select_sym():
+
+    with open("a.txt") as f:
+        lines = f.readlines()
+        api_key = lines[0].strip()
+        secret  = lines[1].strip()
+
+    binance = ccxt.binance(config={
+        'apiKey': api_key, 
+        'secret': secret,
+        'enableRateLimit': True,
+        'options': {
+            'defaultType': 'future'
+        }
+    })
+
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--symbol',
                         '-s',
-                        default='BNB/USDT',
+                        default=None,
                         type=str,
                         )
     args = parser.parse_args()
+
+    if args.symbol:
+        sym = args.symbol
+    else:
+        sym = select_sym()
     trader = Trader(args.symbol)
     trader.run0612()
