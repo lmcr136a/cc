@@ -182,7 +182,7 @@ class Trader():
         tr = {}
         tr['ent'] = [0, 0]
         iter = 0
-        self.anxious = 1
+        self.anxious = 0.000001
         while len(transactions) < self.order_num:
             m1, m2, m3, m4 = self.get_ms()
 
@@ -215,7 +215,9 @@ class Trader():
                 # 시간이 오래 지날수록 욕심을 버리기
                 if (howmuchtime)%(2*3600/self.time_interval) == 0: # 1시간
                     self.anxious *= 0.8
+                    print(self.anxious)
                     self.anxious = max(self.anxious, 1.2/self.satisfying_profit)
+                    print(self.anxious)
 
                 if curr_pnl < self.max_loss \
                     or\
