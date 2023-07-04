@@ -182,7 +182,7 @@ class Trader():
         tr = {}
         tr['ent'] = [0, 0]
         iter = 0
-        self.anxious = 0.000001
+        self.anxious = 1
         while len(transactions) < self.order_num:
             m1, m2, m3, m4 = self.get_ms()
 
