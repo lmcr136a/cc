@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import mplfinance as mpf
 import time
+import argparse
 import matplotlib.pyplot as plt
 import ccxt 
 from visualization import *
@@ -25,7 +26,7 @@ SHORT = "Short"
 
 
 class Trader():
-    def __init__(self) -> None:
+    def __init__(self, symbol='BNB/USDT') -> None:
         with open("a.txt") as f:
             lines = f.readlines()
             api_key = lines[0].strip()
@@ -39,7 +40,7 @@ class Trader():
                 'defaultType': 'future'
             }
         })
-        self.sym = 'BNB/USDT'
+        self.sym = symbol
         self.order_num = 30
         self.tf = '1m'
         self.lev = 20
@@ -185,8 +186,8 @@ class Trader():
         tr = {}
         tr['ent'] = [0, 0]
         iter = 0
-        cond1, cond2 = 0.1, 0.1
-        self.anxious = 1
+        cond1, cond2 = 0.2, 0.1
+        self.anxious = 0.0001
         while len(transactions) < self.order_num:
             m1, m2, m3, m4 = self.get_ms()
 
@@ -219,7 +220,7 @@ class Trader():
                 # 시간이 오래 지날수록 욕심을 버리기
                 if (howmuchtime)%(2*3600/self.time_interval) == 0: # 1시간
                     self.anxious *= 0.8
-                    self.anxious = max(self.anxious, self.min_profit)
+                    self.anxious = max(self.anxious, 1)
 
                 if curr_pnl < self.max_loss \
                     or\
@@ -427,5 +428,13 @@ def close(pos, tr, profit, lev=1):
 
 
 if __name__ == "__main__":
-    trader = Trader()
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--symbol',
+                        '-s',
+                        default='BNB/USDT',
+                        type=str,
+                        )
+    args = parser.parse_args()
+    trader = Trader(args.symbol)
     trader.run0612()

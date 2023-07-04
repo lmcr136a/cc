@@ -1,1 +1,1 @@
-[{'ent': [0, 0], 'close': [-1, 249.88], 'position': 'Long', 'pnl': 'inf%'}]
+[{'ent': [4334, 249.13], 'close': [4962, 247.54], 'position': 'Short', 'pnl': '12.91%'}]
