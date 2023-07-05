@@ -11,24 +11,25 @@ from utils import *
 class Trader():
     def __init__(self, symbol=None, symnum=1) -> None:
         self.binance = get_binance()
-        self.symnum = symnum
-        self.cond1 = 0.2
+        self.symnum = float(symnum)
+        self.other_running_sym_num = 0
+        self.cond1 = 0.4
         self.pre_cond = 0.1
         self.buying_cond = self.cond1
-        self.order_num = 30
+        self.order_num = 1                      # 거래 한번만
         self.tf = '1m'
         self.lev = 20
         self.wins = [1, 11, 20, 40]
         self.limit = self.wins[-1]*10           # for past_data
         self.max_loss = max(-2*self.lev, -30)   # 마이너스인거 확인
-        self.min_profit = 0.25*self.lev          # 20 일때 5%
+        self.min_profit = 0.15*self.lev          # 20 일때 3%
         
         if not symbol:
             symbol = select_sym(self.binance, self.buying_cond, self.pre_cond, self.tf, self.limit, self.wins)
         self.sym = symbol
 
         # 갑자기 올랐을때/ 떨어졌을 때 satisfying_profit 넘으면 close
-        self.satisfying_profit = 0.6*self.lev   # 20 일때 12%
+        self.satisfying_profit = 0.4*self.lev   # 20 일때 6%
 
         self.time_interval = 2
         self.tf_ = int(self.tf[:-1])
@@ -38,7 +39,7 @@ class Trader():
         self.inquire_curr_info(init=True)
 
         if self.set_lev:  # 기존꺼 가져오는 경우가 아니라 걍 첨에 시작하는 경우
-            self.amount = cal_compound_amt(self.wallet_usdt, self.lev, self.price, self.symnum)
+            self.amount = cal_compound_amt(self.wallet_usdt, self.lev, float(self.inquire_curr_price()), self.symnum)
         
         print(f"{'*'*50}\nwallet:{round(self.wallet_usdt, 3)}  tf: {self.tf}  lev:{self.lev}  \
 \namt: {self.amount}  inf: {self.wins}\n{'*'*50}  [[{self.max_loss}~{self.min_profit}]]")
@@ -70,26 +71,36 @@ class Trader():
         self.update_wallet(balance)
 
         for position in positions:
+            amt = float(position['positionAmt'])
+            if amt > 0 and position["symbol"] == self.sym.replace("/", ""):
+                self.other_running_sym_num += 1
+        self.symnum -= self.other_running_sym_num 
+        print(f"other_running_sym_num: {self.other_running_sym_num}  self.symnum: {self.symnum}")
+
+        for position in positions:
+            amt = float(position['positionAmt'])
             if position["symbol"] == self.sym.replace("/", ""):
                 amt = float(position['positionAmt'])
                 if amt == 0:
                     self.status = None
                     return 0
-                pnl, profit = self.get_curr_pnl(self.sym.replace("/", ""))
+                pnl, profit = get_curr_pnl(self.binance, self.sym.replace("/", ""))
                 if init:
                     self.init_ckpt(position, pnl)
                     self.set_lev = False
+                    return None
 
 
     def init_ckpt(self, position, pnl):
         amt = float(position['positionAmt'])
         self.lev = float(position['leverage'])
         self.amount = amt
-        print(f"{self.sym} Current PNL:", pnl, "% Leverage: ", self.lev, ' Amt: ', amt)
         if amt < 0:
             self.status = SHORT
         elif amt > 0:
             self.status = LONG
+        print(f"{self.sym} {self.status} Current PNL:", pnl, "% Leverage: ", self.lev, ' Amt: ', amt)
+        
 
     def inquire_curr_price(self):
         info = self.binance.fetch_ticker(self.sym)
@@ -133,12 +144,13 @@ class Trader():
         tr['ent'] = [0, 0]
         iter = 0
         self.anxious = 1
-        while len(transactions) < self.order_num:
+        self.pre_pnls = []
+        while len(transactions) < self.order_num: 
             m1, m2, m3, m4 = get_ms(self.binance, self.sym, self.tf, self.limit, self.wins)
 
             if not self.status:
             
-                self.status = timing_to_position(self.sym, buying_cond=self.buying_cond, pre_cond=self.pre_cond)
+                self.status = timing_to_position(self.binance, self.sym, buying_cond=self.buying_cond, pre_cond=self.pre_cond, tf=self.tf, limit=self.limit, wins=self.wins)
 
                 if self.status == LONG:
                     self.e_long()
@@ -151,19 +163,23 @@ class Trader():
             else :
                 howmuchtime = iter - tr['ent'][0]
                 # 시간이 오래 지날수록 욕심을 버리기
-                if (howmuchtime)%(2*3600/self.time_interval) == 0: # 1시간
-                    self.anxious *= 0.8
+                if (howmuchtime)%(3600/self.time_interval) == 0 and howmuchtime > 0: # 3600 == 1h
+                    loss_count = np.sum(np.where(np.array(self.pre_pnls) < 0, 1, 0))
+                    loss_ratio = loss_count/len(self.pre_pnls)  # 값이 크면 계속 잃었던 것
+                    self.anxious *= (1.0 - 0.3*loss_ratio)
                     self.anxious = max(self.anxious, 1.2/self.satisfying_profit)
+                    
                 satisfying_price = self.satisfying_profit*self.anxious
                 curr_cond = get_curr_cond(m1, period=500)
-                does_m4_turnning = m4_turn(self.status, m2, m3, m4)
+                does_m4_turnning = m4_turn(self.status, m4)
                 
                 # curr pnl을 return하는건 그냥임
-                curr_pnl = timing_to_close(binance=self.binance, sym=self.sym, status=self.status, 
+                close_position, curr_pnl = timing_to_close(binance=self.binance, sym=self.sym, status=self.status, 
                         curr_cond=curr_cond, does_m4_turnning=does_m4_turnning, m1=m1, satisfying_price=satisfying_price, 
                         max_loss=self.max_loss, min_profit=self.min_profit, cond1=self.cond1, howmuchtime=howmuchtime)
+                self.pre_pnls.append(curr_pnl)
                 
-                if curr_pnl:
+                if close_position:
                     if self.status == LONG:
                         self.e_short(close=True)
                     else:
@@ -181,7 +197,7 @@ class Trader():
                     self.update_wallet()
                     price = float(self.inquire_curr_price())
                     self.amount = cal_compound_amt(self.wallet_usdt, self.lev, price, self.symnum)
-
+                
             time.sleep(self.time_interval)
             iter += 1
 
@@ -197,10 +213,11 @@ if __name__ == "__main__":
                         )
     parser.add_argument('--symnum',
                         '-n',
-                        default=None,
-                        type=str,
+                        default=1,
+                        type=int,
                         )
     args = parser.parse_args()
 
-    trader = Trader(args.symbol, args.symnum)
-    trader.run()
+    while 1:
+        trader = Trader(args.symbol, args.symnum)
+        trader.run()

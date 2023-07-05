@@ -15,32 +15,40 @@ with open("syms.txt", 'r') as f:
 print(len(SYMLIST))
 
 def cal_compound_amt(wallet_usdt, lev, price, symnum):
-    return np.floor(wallet_usdt*lev/price*0.9/symnum)
+    return np.floor(wallet_usdt*lev/float(price)*0.9/float(symnum))
 
 
-def select_sym(binance, buying_cond, pre_cond, tf, limit, wins):
+def select_sym(binance, __buying_cond, __pre_cond, tf, limit, wins):
     NEW_SYM = []
     while 1:
-        for sym in SYMLIST:
-            try:
-                timing = timing_to_position(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=False)
-                NEW_SYM.append(sym)
-            except:
-                pass
+        for sym in SYMLIST:  # 0705 0.55초 걸림
+            buying_cond, pre_cond = __buying_cond, __pre_cond
+            
+            market_status = bull_or_bear(past_data(binance,sym=sym, tf='2h', limit=50))
+            if market_status == "BULL":     # 상승장이면
+                buying_cond = -0.3      # 원래 -buying_cond 보다 낮아야 살 수 있던걸 바꿔줌
+                pre_cond = -0.75
+            elif market_status == "BEAR":   # 하락장이면
+                buying_cond = -0.3     # 원래 buying_cond 보다 높아야 살 수 있던걸 바꿔줌
+                pre_cond = -0.75
+
+            timing = timing_to_position(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=False)
             if timing:
                 balance = binance.fetch_balance()
                 positions = balance['info']['positions']
                 for position in positions:
                     if position["symbol"] == sym.replace("/", ""):
                         amt = float(position['positionAmt'])
-                        if amt == 0:
-                            print(f"{sym} O")
+                        if amt == 0 and "ETH" not in sym and "BCH" not in sym and "DASH" not in sym:
+                            print(f"\n\n\n{sym} {market_status} MARKET OOOOO")
                             return sym
             else:
-                print(f"{sym} X")
+                print(f"{sym} {market_status} MARKET.. X")
+                time.sleep(0.4)
 
-    with open("syms.txt", 'w') as f:
-        f.write(str(NEW_SYM))
+        # with open("syms.txt", 'w') as f:
+        #     f.write(str(NEW_SYM))
+        # exit()
 
 def get_ms(binance, sym, tf, limit, wins):
     df = past_data(binance, sym=sym, tf=tf, limit=limit)
@@ -89,7 +97,7 @@ def timing_to_close(binance, sym, status, curr_cond, does_m4_turnning,
                     m1, satisfying_price, max_loss, min_profit, cond1, howmuchtime):
     curr_pnl, profit = get_curr_pnl(binance, sym.replace("/", ""))
     suddenly = isitsudden(m1, status)
-    print(f"{sym} {howmuchtime}] PRICE: {m1[-1]} PNL: {profit} ({round(curr_pnl, 2)}%), COND: {round(curr_cond, 2)} SAT_P: {satisfying_price}")
+    print(f"{sym} {howmuchtime}] PRICE: {round(m1[-1], 2)} PNL: {profit} ({round(curr_pnl, 2)}%), COND: {round(curr_cond, 2)} SAT_P: {satisfying_price}")
     
     if curr_pnl < max_loss \
         or\
@@ -108,9 +116,9 @@ def timing_to_close(binance, sym, status, curr_cond, does_m4_turnning,
     (suddenly and curr_pnl > satisfying_price):
         print(f"!!!{sym}")
         print(curr_pnl, status, suddenly)
-        return curr_pnl
+        return True, curr_pnl
     else:
-        return False
+        return False, curr_pnl
 
 
 def timing_to_position(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=True):
@@ -120,6 +128,34 @@ def timing_to_position(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=
     pre_cond = np.mean(val[1:])
     if pr:
         print(f'{sym} PRICE:', m1[-1], " SHAPE: ", turnning_shape, ' CONDS:', list(map(lambda x: round(x, 2), val)))
+
+    # str = ''
+    # if turnning_shape == 'u':
+    #     str += 'u 긴 한데  '
+    # elif turnning_shape == 'n':
+    #     str += 'n 이긴 한데  '
+    # else:
+    #     str += '-인데 심지어  '
+    
+    # if val[0] < -buying_cond:
+    #     str += '지금 가격이 -buying cond 보다 낮음 (u일때 살 수 있음)  '
+    # elif val[0] > buying_cond:
+    #     str += '지금 가격이 buying cond 보다 높음 (n일때 살 수 있음)  '
+    # else:
+    #     str += f'지금 가격이 어정쩡함 buying_cond: {buying_cond}'  
+
+
+    # if pre_cond < -pre_cond:
+    #     str += '이 전의 조건들이 -pre_cond보다 낮음 (u일때 살 수 있음)'
+    # elif pre_cond > pre_cond:
+    #     str += '이 전의 조건들이 pre_cond보다 높음 (n일때 살 수 있음)'
+    # else:
+    #     str += f'과거로부터의 위치가 어정쩡함 pre_cond: {pre_cond}'
+
+    # print(str)
+    # time.sleep(5)
+
+
 
     if turnning_shape == 'u' and val[0] < -buying_cond and pre_cond < -pre_cond:
         return LONG
@@ -193,58 +229,72 @@ def whether_turnning2(m2, m3, m4, ref=0.001, ref2=0.002):
     dd_m3 = np.diff(d_m3)   # concave?
     # ddd_m3 = np.diff(dd_m3) # curling up?
     
-    # m2 m3 crossed
-    prevs = [-3, -4, -5]
-    diff = m2[prevs] - m3[prevs]
-    prev_m2_undr_m3 = np.all(diff < 0)
-    prev_m2_on_m3 = np.all(diff > 0)
+    # # m2 m3 crossed  >> 문제있음..
+    # prevs = [-3, -4, -5]
+    # diff = m2[prevs] - m3[prevs]
+    # prev_m2_undr_m3 = np.all(diff < 0)
+    # prev_m2_on_m3 = np.all(diff > 0)
 
-    curr_diff = m2[-1] - m3[-1]
-    curr_m2_on_m3 = curr_diff > 0
-    curr_m2_undr_m3 = curr_diff < 0
+    # # 걍 일정시간동안 WWW 거린 애 찾아서 ..?
+    # prevs = [-3, -4, -5]
+    # diff = m2[prevs] - m3[prevs]
+    # prev_m2_undr_m3 = np.all(diff < 0)
+    # prev_m2_on_m3 = np.all(diff > 0)
 
-    r = 3
-    conref = 0.0009
-    conref2 = 0.0007
-    m2_concave = np.mean(dd_m2[-r:]) > conref
-    m3_concave = np.mean(dd_m3[-r:]) > conref2
-    hueck = dd_m2[-1] > conref
+    # curr_diff = m2[-1] - m3[-1]
+    # curr_m2_on_m3 = curr_diff > 0
+    # curr_m2_undr_m3 = curr_diff < 0
 
-    m2_convex = np.mean(dd_m2[-r:]) < -conref
-    m3_convex = np.mean(dd_m3[-r:]) < -conref2
-    hueck_ = dd_m2[-1] < -conref
+    # r = 3
+    # conref = 0.0009
+    # conref2 = 0.0007
+    # m2_concave = np.mean(dd_m2[-r:]) > conref
+    # m3_concave = np.mean(dd_m3[-r:]) > conref2
+    # hueck = dd_m2[-1] > conref
 
-    concave = m2_concave and m3_concave and hueck
-    convex = m2_convex and m3_convex and hueck_
+    # m2_convex = np.mean(dd_m2[-r:]) < -conref
+    # m3_convex = np.mean(dd_m3[-r:]) < -conref2
+    # hueck_ = dd_m2[-1] < -conref
+
+    # concave = m2_concave and m3_concave and hueck
+    # convex = m2_convex and m3_convex and hueck_
     str = ''
-    print_ = True
-    if print_:
-        if convex:
-            str += '볼록'
-        if concave:
-            str += '오목'
-        if curr_m2_on_m3:
-            str += ' m2가 위에'
-        if curr_m2_undr_m3:
-            str += ' m3가 위에'
+    # print_ = False
+    # if print_:
+    #     if convex:
+    #         str += '볼록'
+    #     if concave:
+    #         str += '오목'
+    #     if curr_m2_on_m3:
+    #         str += ' m2가 위에'
+    #     if curr_m2_undr_m3:
+    #         str += ' m3가 위에'
 
-        str += " | m2 "
-        if m2_convex:
-            str += '볼록'
-        if m2_concave:
-            str += '오목'
-        if hueck or hueck_:
-            str += '획'
+    #     str += " | m2 "
+    #     if m2_convex:
+    #         str += '볼록'
+    #     if m2_concave:
+    #         str += '오목'
+    #     if hueck or hueck_:
+    #         str += '획'
 
-        str += " | m3 "
-        if m3_convex:
-            str += '볼록'
-        if m3_concave:
-            str += '오목'
+    #     str += " | m3 "
+    #     if m3_convex:
+    #         str += '볼록'
+    #     if m3_concave:
+    #         str += '오목'
+    # #     print(str)
+    # if prev_m2_undr_m3 and curr_m2_on_m3 and concave:
+    #     return 'u'
+    # elif prev_m2_on_m3 and curr_m2_undr_m3 and convex:
+    #     return 'n'
+    
+    u = m4_turn(LONG, m4)  # n
+    n = m4_turn(SHORT, m4)  # u
 
-    if prev_m2_undr_m3 and curr_m2_on_m3 and concave:
+    if u:
         return 'u'
-    elif prev_m2_on_m3 and curr_m2_undr_m3 and convex:
+    elif n:
         return 'n'
     return None
 
@@ -263,7 +313,7 @@ def show_total_pnl(transactions):
     return total_pnl
 
 
-def m4_turn(status, m2, m3, m4, ref=0):
+def m4_turn(status, m4, ref=0):
     i = -1
     m4_inc1 = m4[i-2] - m4[i-4] 
     m4_inc2 = m4[i] - m4[i-1] 
