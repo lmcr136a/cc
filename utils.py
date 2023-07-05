@@ -170,6 +170,7 @@ def isitsudden(m1, status, ref=0.08):
     now = m1[-1]
     prev = m1[-2]
     percent = (now - prev)/prev*100
+    print(percent, ref)
     if status == LONG and percent > ref:
         return True
     elif status == SHORT and percent < -ref:

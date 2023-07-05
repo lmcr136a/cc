@@ -29,7 +29,7 @@ class Trader():
         self.sym = symbol
 
         # 갑자기 올랐을때/ 떨어졌을 때 satisfying_profit 넘으면 close
-        self.satisfying_profit = 0.4*self.lev   # 20 일때 6%
+        self.satisfying_profit = 0.4*self.lev   # 20 일때 8%
 
         self.time_interval = 2
         self.tf_ = int(self.tf[:-1])
@@ -72,7 +72,7 @@ class Trader():
 
         for position in positions:
             amt = float(position['positionAmt'])
-            if amt > 0 and position["symbol"] == self.sym.replace("/", ""):
+            if amt > 0 and position["symbol"] != self.sym.replace("/", ""):
                 self.other_running_sym_num += 1
         self.symnum -= self.other_running_sym_num 
         print(f"other_running_sym_num: {self.other_running_sym_num}  self.symnum: {self.symnum}")
@@ -168,7 +168,7 @@ class Trader():
                     loss_ratio = loss_count/len(self.pre_pnls)  # 값이 크면 계속 잃었던 것
                     self.anxious *= (1.0 - 0.3*loss_ratio)
                     self.anxious = max(self.anxious, 1.2/self.satisfying_profit)
-                    
+
                 satisfying_price = self.satisfying_profit*self.anxious
                 curr_cond = get_curr_cond(m1, period=500)
                 does_m4_turnning = m4_turn(self.status, m4)
