@@ -14,7 +14,7 @@ class Trader():
         self.symnum = float(symnum)
         self.other_running_sym_num = 0
         self.cond1 = 0.4
-        self.pre_cond = 0.1
+        self.pre_cond = 0.0
         self.buying_cond = self.cond1
         self.order_num = 1                      # 거래 한번만
         self.tf = '1m'
@@ -44,14 +44,9 @@ class Trader():
         print(f"{'*'*50}\nwallet:{round(self.wallet_usdt, 3)}  tf: {self.tf}  lev:{self.lev}  \
 \namt: {self.amount}  inf: {self.wins}\n{'*'*50}  [[{self.max_loss}~{self.min_profit}]]")
 
-        market_status = bull_or_bear(past_data(self.binance,sym=self.sym, tf='2h', limit=50))
-        print(f"{self.sym} {market_status} MARKET")
-        if market_status == "BULL":     # 상승장이면
-            self.buying_cond = -0.3      # 원래 -buying_cond 보다 낮아야 살 수 있던걸 바꿔줌
-            self.pre_cond = -0.75
-        elif market_status == "BEAR":   # 하락장이면
-            self.buying_cond = -0.3     # 원래 buying_cond 보다 높아야 살 수 있던걸 바꿔줌
-            self.pre_cond = -0.75
+        actions = inspect_market(self.binance, self.sym, self.satisfying_profit, self.buying_cond)
+        self.short_only, self.long_only, self.buying_cond, self.satisfying_profit = actions
+        
 
     def update_wallet(self, balance=None):
         if not balance:
@@ -147,7 +142,8 @@ class Trader():
         self.pre_pnls = []
         while len(transactions) < self.order_num: 
             m1, m2, m3, m4 = get_ms(self.binance, self.sym, self.tf, self.limit, self.wins)
-
+            
+            print(self.market_status, timing_to_position(self.binance, self.sym, buying_cond=self.buying_cond, pre_cond=self.pre_cond, tf=self.tf, limit=self.limit, wins=self.wins))
             if not self.status:
             
                 self.status = timing_to_position(self.binance, self.sym, buying_cond=self.buying_cond, pre_cond=self.pre_cond, tf=self.tf, limit=self.limit, wins=self.wins)

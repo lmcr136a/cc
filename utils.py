@@ -6,6 +6,7 @@ import time
 import argparse
 import matplotlib.pyplot as plt
 import ccxt 
+from inspect_market import *
 
 LONG = "Long"
 SHORT = "Short"
@@ -23,16 +24,17 @@ def select_sym(binance, __buying_cond, __pre_cond, tf, limit, wins):
     while 1:
         for sym in SYMLIST:  # 0705 0.55초 걸림
             buying_cond, pre_cond = __buying_cond, __pre_cond
-            
-            market_status = bull_or_bear(past_data(binance,sym=sym, tf='2h', limit=50))
-            if market_status == "BULL":     # 상승장이면
-                buying_cond = -0.3      # 원래 -buying_cond 보다 낮아야 살 수 있던걸 바꿔줌
-                pre_cond = -0.75
-            elif market_status == "BEAR":   # 하락장이면
-                buying_cond = -0.3     # 원래 buying_cond 보다 높아야 살 수 있던걸 바꿔줌
-                pre_cond = -0.75
 
-            timing = timing_to_position(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=False)
+            actions = inspect_market(binance, sym, 1, buying_cond)
+            short_only, long_only, buying_cond, _ = actions
+        
+            timing_pos = timing_to_position(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=False)
+            
+            timing = False
+            if (timing_pos == SHORT and not long_only)\
+                or (timing_pos == LONG and not short_only):
+                timing = True
+
             if timing:
                 balance = binance.fetch_balance()
                 positions = balance['info']['positions']
@@ -40,10 +42,9 @@ def select_sym(binance, __buying_cond, __pre_cond, tf, limit, wins):
                     if position["symbol"] == sym.replace("/", ""):
                         amt = float(position['positionAmt'])
                         if amt == 0 and "ETH" not in sym and "BCH" not in sym and "DASH" not in sym:
-                            print(f"\n\n\n{sym} {market_status} MARKET OOOOO")
+                            print(f"\n!\n!\n{sym} OOOOO")
                             return sym
             else:
-                print(f"{sym} {market_status} MARKET.. X")
                 time.sleep(0.4)
 
         # with open("syms.txt", 'w') as f:
@@ -58,18 +59,6 @@ def get_ms(binance, sym, tf, limit, wins):
     m4 = df['close'].rolling(window=wins[3]).mean()
     return m1, m2, m3, m4
 
-
-def past_data(binance, sym, tf, limit, since=None):
-    coininfo = binance.fetch_ohlcv(
-        symbol=sym, 
-        timeframe=tf, 
-        since=since, 
-        limit=limit
-    )
-    df = pd.DataFrame(coininfo, columns=['datetime', 'open', 'high', 'low', 'close', 'volume'])
-    df['datetime'] = pd.to_datetime(df['datetime'], unit='ms')
-    df.set_index('datetime', inplace=True)
-    return df
 
     
 def get_curr_conds(binance, sym, tfs= ['1m', '3m', '5m', '30m'], limit=180):
@@ -122,44 +111,17 @@ def timing_to_close(binance, sym, status, curr_cond, does_m4_turnning,
 
 
 def timing_to_position(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=True):
+    ## TODO: 방금 올랐을때 숏사고 방금 떨어졌을때 롱사기
     m1, m2, m3 , m4 = get_ms(binance, sym, tf, limit, wins)
     turnning_shape = whether_turnning2(m2, m3, m4, ref=0.001*0.01, ref2=0.01*0.01)  # u or n or None
     val = get_curr_conds(binance, sym)
-    pre_cond = np.mean(val[1:])
+    # pre_cond = np.mean(val[1:])
     if pr:
         print(f'{sym} PRICE:', m1[-1], " SHAPE: ", turnning_shape, ' CONDS:', list(map(lambda x: round(x, 2), val)))
 
-    # str = ''
-    # if turnning_shape == 'u':
-    #     str += 'u 긴 한데  '
-    # elif turnning_shape == 'n':
-    #     str += 'n 이긴 한데  '
-    # else:
-    #     str += '-인데 심지어  '
-    
-    # if val[0] < -buying_cond:
-    #     str += '지금 가격이 -buying cond 보다 낮음 (u일때 살 수 있음)  '
-    # elif val[0] > buying_cond:
-    #     str += '지금 가격이 buying cond 보다 높음 (n일때 살 수 있음)  '
-    # else:
-    #     str += f'지금 가격이 어정쩡함 buying_cond: {buying_cond}'  
-
-
-    # if pre_cond < -pre_cond:
-    #     str += '이 전의 조건들이 -pre_cond보다 낮음 (u일때 살 수 있음)'
-    # elif pre_cond > pre_cond:
-    #     str += '이 전의 조건들이 pre_cond보다 높음 (n일때 살 수 있음)'
-    # else:
-    #     str += f'과거로부터의 위치가 어정쩡함 pre_cond: {pre_cond}'
-
-    # print(str)
-    # time.sleep(5)
-
-
-
-    if turnning_shape == 'u' and val[0] < -buying_cond and pre_cond < -pre_cond:
+    if turnning_shape == 'u' and val[0] < -buying_cond:# and pre_cond < -pre_cond:
         return LONG
-    elif turnning_shape == 'n' and val[0] > buying_cond and pre_cond > pre_cond:
+    elif turnning_shape == 'n' and val[0] > buying_cond:# and pre_cond > pre_cond:
         return SHORT
     else:
         return None
@@ -195,24 +157,6 @@ def log_wallet_history(balance):
 # 심볼 탐색후 선택
 
 
-def bull_or_bear(df):  # 상승장인지 하락장인지?
-    # df: 2H time frame, 3일간의 흐름을 본다! 길이 12*3
-    tfnum = 24/2  # 하루의 막대개수
-    date = 3
-    m = df['close'][-int(tfnum*date):]
-    blocks = [0, int(tfnum*date-tfnum), int(tfnum*date-0.5*tfnum)]
-    rising = []
-    for b in blocks:
-        for i in range(1, len(m)-b):
-            rising.append((m[b+i] - m[b])/m[b]*100)
-    rising_coef = np.mean(rising)
-    if rising_coef > 2:
-        return "BULL"
-    elif rising_coef < -1.5:
-        return "BEAR"
-    else:
-        return "~-~-~"
-    
 
 
 
