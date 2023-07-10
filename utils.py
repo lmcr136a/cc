@@ -61,7 +61,7 @@ def get_ms(binance, sym, tf, limit, wins):
 
 
     
-def get_curr_conds(binance, sym, tfs= ['1m', '3m', '5m', '30m'], limit=180):
+def get_curr_conds(binance, sym, tfs= ['1m', '3m', '5m', '30m'], limit=30):
     # limit=500이면 8.3시간, 24.9시간, 41.5시간, 10일
     # limit=180이면 3시간, 9시간, 15시간, 3일
     pos_val = []
@@ -96,7 +96,7 @@ def timing_to_close(binance, sym, status, curr_cond, does_m4_turnning,
         does_m4_turnning
             and\
         (
-            (curr_cond < cond1 and status == SHORT) \
+            (curr_cond < -cond1 and status == SHORT) \
                 or\
             (curr_cond > cond1 and status == LONG)
         )
@@ -152,12 +152,6 @@ def log_wallet_history(balance):
     plt.plot(wallet_info[0], wallet_info[1])
     plt.savefig("wallet_log.png")
     plt.close()
-
-# TODO: 
-# 심볼 탐색후 선택
-
-
-
 
 
 def minmax(m):
@@ -234,8 +228,8 @@ def whether_turnning2(m2, m3, m4, ref=0.001, ref2=0.002):
     # elif prev_m2_on_m3 and curr_m2_undr_m3 and convex:
     #     return 'n'
     
-    u = m4_turn(LONG, m4)  # n
-    n = m4_turn(SHORT, m4)  # u
+    n = m4_turn(LONG, m4)  # n
+    u = m4_turn(SHORT, m4)  # u
 
     if u:
         return 'u'

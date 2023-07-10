@@ -8,8 +8,9 @@ import matplotlib.pyplot as plt
 import ccxt 
 from utils import *
 
-
-
+"""
+TODO: 왔다갔다하면 올랐을때 팔기
+"""
 
 class Trader():
     def __init__(self, symbol=None, symnum=1) -> None:

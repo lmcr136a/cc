@@ -64,7 +64,7 @@ stsfng_lv1, stsfng_lv2 = 5, 3  # 이만큼만 먹고 나오기
 # Return short_only, long_only, buying_cond, satisfying_pnl or False
 def a_l1():
     # print("롱만가능, 기준조정")
-    return False, False, cond_lv2, False
+    return False, True, cond_lv2, False
 def a_l2():
     # print("모르겠는데 상승할거같음, 만족조금만")
     return False, False, cond_lv1, stsfng_lv1
@@ -87,7 +87,7 @@ def inspect_market(binance, sym, satisfying_pnl, buying_cond=0.4):
     st1 = bull_or_bear(binance, sym=sym, mode=3)
     st2 = bull_or_bear(binance, sym=sym, mode=2)
     st3 = bull_or_bear(binance, sym=sym, mode=1)
-    print(f"**{sym}__[4h~ {st1}]_[12h~ {st2}]_[36h~ {st3}]")
+    print(f"**{sym}__[4h~ {st3}]_[12h~ {st2}]_[36h~ {st1}]")
 
     if st1 == 'BEAR':           # 36시간동안 하락
         if st2 == "BEAR":           # 12시간동안 하락
