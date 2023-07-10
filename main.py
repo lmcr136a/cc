@@ -8,6 +8,9 @@ import matplotlib.pyplot as plt
 import ccxt 
 from utils import *
 
+
+
+
 class Trader():
     def __init__(self, symbol=None, symnum=1) -> None:
         self.binance = get_binance()
