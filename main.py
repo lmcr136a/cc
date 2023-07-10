@@ -215,8 +215,16 @@ if __name__ == "__main__":
                         default=1,
                         type=int,
                         )
+    parser.add_argument('--re_execution',
+                        '-r',
+                        default=True,
+                        type=bool,
+                        )
     args = parser.parse_args()
-
+    sym = args.symbol
     while 1:
-        trader = Trader(args.symbol, args.symnum)
+        trader = Trader(sym, args.symnum)
         trader.run()
+        sym = None
+        if not args.re_execution:
+            break
