@@ -6,6 +6,7 @@ import time
 import argparse
 import matplotlib.pyplot as plt
 import ccxt 
+from colorama import Fore, Style
 from inspect_market import *
 
 LONG = "Long"
@@ -86,7 +87,7 @@ def timing_to_close(binance, sym, status, curr_cond, does_m4_turnning,
                     m1, satisfying_price, max_loss, min_profit, cond1, howmuchtime):
     curr_pnl, profit = get_curr_pnl(binance, sym.replace("/", ""))
     suddenly = isitsudden(m1, status)
-    print(f"{sym} {howmuchtime}] PRICE: {round(m1[-1], 2)} PNL: {profit} ({round(curr_pnl, 2)}%), COND: {round(curr_cond, 2)} SAT_P: {satisfying_price}")
+    print(f"{sym} {howmuchtime} {status}] PRICE: {round(m1[-1], 2)} PNL: {profit} ({pnlstr(round(curr_pnl, 2))}), COND: {round(curr_cond, 2)} SAT_P: {satisfying_price}")
     
     if curr_pnl < max_loss \
         or\
@@ -103,8 +104,7 @@ def timing_to_close(binance, sym, status, curr_cond, does_m4_turnning,
     )\
         or\
     (suddenly and curr_pnl > satisfying_price):
-        print(f"!!!{sym}")
-        print(curr_pnl, status, suddenly)
+        print(f"!!!{_y(sym)} {pnlstr(curr_pnl)} {status} {suddenly}")
         return True, curr_pnl
     else:
         return False, curr_pnl
@@ -132,7 +132,7 @@ def isitsudden(m1, status, ref=0.08):
     now = m1[-1]
     prev = m1[-2]
     percent = (now - prev)/prev*100
-    print(percent, ref)
+    # print(percent, ref)
     if status == LONG and percent > ref:
         return True
     elif status == SHORT and percent < -ref:
@@ -287,3 +287,20 @@ def get_binance():
     })
     return binance
 
+# 예쁜 print를 위해
+def _b(str):
+    return f"{Fore.BLUE}{str}{Style.RESET_ALL}"
+def _r(str):
+    return f"{Fore.RED}{str}{Style.RESET_ALL}"
+def _y(str):
+    return f"{Fore.YELLOW}{str}{Style.RESET_ALL}"
+def _c(str):
+    return f"{Fore.CYAN}{str}{Style.RESET_ALL}"
+
+def pnlstr(pnlstr):
+    if float(pnlstr) < 0:
+        return _r(str(pnlstr)+"%")
+    elif float(pnlstr) > 0:
+        return _c(str(pnlstr)+"%")
+    else:
+        return str(pnlstr)+"%"
