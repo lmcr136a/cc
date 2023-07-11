@@ -9,6 +9,8 @@ import ccxt
 from colorama import Fore, Style
 from inspect_market import *
 
+RISING = "Rising"
+FALLING = "Falling"
 LONG = "Long"
 SHORT = "Short"
 
@@ -59,19 +61,6 @@ def get_ms(binance, sym, tf, limit, wins):
     return m1, m2, m3, m4
 
 
-    
-def get_curr_conds(binance, sym, tfs= ['1m', '3m', '5m', '30m'], limit=30):
-    # limit=500이면 8.3시간, 24.9시간, 41.5시간, 10일
-    # limit=180이면 3시간, 9시간, 15시간, 3일
-    pos_val = []
-    for tf in tfs:
-        df = past_data(binance, sym, tf, limit=limit)
-        m = df['close']
-        v = get_curr_cond(m)
-        pos_val.append(v)
-    return pos_val
-
-
 def get_curr_pnl(binance, sym):
     wallet = binance.fetch_balance(params={"type": "future"})
     positions = wallet['info']['positions']
@@ -81,12 +70,12 @@ def get_curr_pnl(binance, sym):
             return round(pnl,2), round(float(pos['unrealizedProfit']), 2)
 
 
-def timing_to_close(binance, sym, status, curr_cond, does_m4_turnning, 
+def timing_to_close(binance, sym, status, does_m4_turnning, 
                     m1, satisfying_price, max_loss, min_profit, cond1, howmuchtime):
     curr_pnl, profit = get_curr_pnl(binance, sym.replace("/", ""))
     suddenly = isitsudden(m1, status)
     print(f"{sym} {howmuchtime} {status}] PRICE: {round(m1[-1], 2)} PNL: {profit} ({pnlstr(round(curr_pnl, 2))}), COND: {round(curr_cond, 2)} SAT_P: {satisfying_price}")
-    
+    mvmt = curr_movement(binance, sym, minute=3)
     # 이 이상 잃을 수는 없다
     loss_cond = curr_pnl < max_loss
 
@@ -100,9 +89,9 @@ def timing_to_close(binance, sym, status, curr_cond, does_m4_turnning,
 
     # u 또는 n
     shape_cond = (curr_pnl > min_profit and does_m4_turnning and\
-                    ((curr_cond < -cond1 and status == SHORT) \
+                    ((mvmt==FALLING and status == SHORT) \
                     or\
-                    (curr_cond > cond1 and status == LONG)))
+                    (mvmt==RISING > cond1 and status == LONG)))
     
     # 적당히 먹었다!
     sat_cond = suddenly and curr_pnl > satisfying_price
@@ -117,21 +106,37 @@ def timing_to_close(binance, sym, status, curr_cond, does_m4_turnning,
 def timing_to_position(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=True):
     m1, m2, m3 , m4 = get_ms(binance, sym, tf, limit, wins)
     turnning_shape = whether_turnning2(m2, m3, m4, ref=0.001*0.01, ref2=0.01*0.01)  # u or n or None
-    val = get_curr_conds(binance, sym)
+    mvmt = curr_movement(binance, sym)
     # pre_cond = np.mean(val[1:])
     if pr:
-        print(f'{sym} PRICE:', m1[-1], " SHAPE: ", turnning_shape, ' CONDS:', list(map(lambda x: round(x, 2), val)))
+        print(f'{sym} PRICE:', m1[-1], " SHAPE: ", turnning_shape, mvmt)
 
-    if turnning_shape == 'u' and val[0] < -buying_cond:# and pre_cond < -pre_cond:
+    # 오른게 더오르고 내린게 더내려간다
+    # 그냥 약간 올랐을때로 변경
+
+    if turnning_shape == 'u' and mvmt == FALLING:
         return LONG
-    elif turnning_shape == 'n' and val[0] > buying_cond:# and pre_cond > pre_cond:
+    elif turnning_shape == 'n' and mvmt == RISING:
         return SHORT
     else:
         return None
 
 
+def curr_movement(binance, sym, minute=2):
+    m = past_data(binance, sym, '1m', limit=minute)['close']
+    diff = []
+    for i in range(len(m)-1):
+        diff.append(m[i+1] - m[i])
+    d = np.sum(diff)
+    if d > 0 and (m[-1] - m[-2] > 0):
+        return RISING
+    elif d < 0 and (m[-1] - m[-2] < 0):
+        return FALLING
+    else:
+        return "~"
 
-def isitsudden(m1, status, ref=0.08):
+
+def isitsudden(m1, status, ref=0.085):
     now = m1[-1]
     prev = m1[-2]
     percent = (now - prev)/prev*100
@@ -221,10 +226,10 @@ def whether_turnning2(m2, m3, m4, ref=0.001, ref2=0.002):
     return None
 
 
-def get_curr_cond(m, period=500):
-    m = m[-period:]
-    mm = minmax(m)
-    return mm[-1]
+# def get_curr_cond(m, period=500):
+#     m = m[-period:]
+#     mm = minmax(m)
+#     return mm[-1]
     
 def show_total_pnl(transactions):
     pnls=[]
