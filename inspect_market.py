@@ -67,7 +67,7 @@ def a_l1():
     return False, True, cond_lv2, False
 def a_l2():
     # print("모르겠는데 상승할거같음, 만족조금만")
-    return False, False, cond_lv1, stsfng_lv1
+    return False, True, cond_lv1, stsfng_lv1
 def a_s1():
     # print("숏만가능, 기준조정")
     return True, False, cond_lv2, False
@@ -148,15 +148,15 @@ def inspect_market(binance, sym, satisfying_pnl, buying_cond=0.4):
                 actions = a_s2()
             elif st3 == "BULL":         # 36~12 하락하다가 12시간전부터 오르기
                 actions = a_l1()
-            else:                       # 지그재그다가 12시간으로 보면 올랐고 4시간동안 지그재그
-                actions = a_l2()
+            else:                       # 36~12 12~4 4~
+                actions = a_s2()
         else:
             if st3 == "BEAR":       # 36 지그재그 12 지그재그 4 하락
                 actions = a_s2()
             elif st3 == "BULL":     # 36 지그재그 12 지그재그 4 상승
                 actions = a_l2()
             else:                   # 36 지그재그 12 지그재그 4 지그재그
-                actions = a_x1()
+                actions = a_s2()
 
     short_only, long_only, new_cond, new_sat_pnl = actions
     if new_cond:
