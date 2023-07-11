@@ -25,7 +25,7 @@ class Trader():
         self.order_num = 1                      # 거래 한번만
         self.tf = '1m'
         self.lev = 20
-        self.wins = [1, 11, 20, 40]
+        self.wins = [1, 11, 20, 20]
         self.limit = self.wins[-1]*10           # for past_data
         self.max_loss = max(-2*self.lev, -25)   # 마이너스인거 확인
         self.min_profit = 0.15*self.lev          # 20 일때 3%
@@ -35,7 +35,7 @@ class Trader():
         self.sym = symbol
 
         # 갑자기 올랐을때/ 떨어졌을 때 satisfying_profit 넘으면 close
-        self.satisfying_profit = 0.4*self.lev   # 20 일때 8%
+        self.satisfying_profit = 0.5*self.lev   # 20 일때 8%
 
         self.time_interval = 2
         self.tf_ = int(self.tf[:-1])
@@ -159,15 +159,14 @@ class Trader():
                     loss_count = np.sum(np.where(np.array(self.pre_pnls) < 0, 1, 0))
                     loss_ratio = loss_count/len(self.pre_pnls)  # 값이 크면 계속 잃었던 것
                     self.anxious *= (1.0 - 0.3*loss_ratio)
-                    self.anxious = round(max(self.anxious, 1.2/self.satisfying_profit), 2)
+                    self.anxious = round(max(self.anxious, self.min_profit), 2)
 
                 satisfying_price = self.satisfying_profit*self.anxious
-                curr_cond = get_curr_cond(m1, period=500)
-                does_m4_turnning = m4_turn(self.status, m4)
+                m4_shape = m4_turn(m4)
                 
                 # curr pnl을 return하는건 그냥임
                 close_position, curr_pnl = timing_to_close(binance=self.binance, sym=self.sym, status=self.status, 
-                        curr_cond=curr_cond, does_m4_turnning=does_m4_turnning, m1=m1, satisfying_price=satisfying_price, 
+                        m4_shape=m4_shape, m1=m1, satisfying_price=satisfying_price, 
                         max_loss=self.max_loss, min_profit=self.min_profit, cond1=self.cond1, howmuchtime=iter)
                 self.pre_pnls.append(curr_pnl)
                 
