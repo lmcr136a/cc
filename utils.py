@@ -226,8 +226,7 @@ def whether_turnning2(m2, m3, m4, ref=0.001, ref2=0.002):
 def get_curr_cond(m, period=500):
     m = m[-period:]
     mm = minmax(m)
-    m_mean = np.mean(mm)
-    return mm[-1] - m_mean
+    return mm[-1]
     
 def show_total_pnl(transactions):
     pnls=[]
