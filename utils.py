@@ -6,6 +6,7 @@ import time
 import argparse
 import matplotlib.pyplot as plt
 import ccxt 
+from colorama import Fore, Style
 from inspect_market import *
 
 LONG = "Long"
@@ -86,32 +87,36 @@ def timing_to_close(binance, sym, status, curr_cond, does_m4_turnning,
                     m1, satisfying_price, max_loss, min_profit, cond1, howmuchtime):
     curr_pnl, profit = get_curr_pnl(binance, sym.replace("/", ""))
     suddenly = isitsudden(m1, status)
-    print(f"{sym} {howmuchtime}] PRICE: {round(m1[-1], 2)} PNL: {profit} ({round(curr_pnl, 2)}%), COND: {round(curr_cond, 2)} SAT_P: {satisfying_price}")
+    print(f"{sym} {howmuchtime} {status}] PRICE: {round(m1[-1], 2)} PNL: {profit} ({pnlstr(round(curr_pnl, 2))}), COND: {round(curr_cond, 2)} SAT_P: {satisfying_price}")
     
-    if curr_pnl < max_loss \
-        or\
-    (
-        curr_pnl > min_profit \
-            and\
-        does_m4_turnning
-            and\
-        (
-            (curr_cond < -cond1 and status == SHORT) \
-                or\
-            (curr_cond > cond1 and status == LONG)
-        )
-    )\
-        or\
-    (suddenly and curr_pnl > satisfying_price):
-        print(f"!!!{sym}")
-        print(curr_pnl, status, suddenly)
+    # 이 이상 잃을 수는 없다
+    loss_cond = curr_pnl < max_loss
+
+    # 지그재그에서 위쪽이면 롱 팔고 아래면 숏 팔고
+    zz_cond = False
+    zigzag, zzdic = handle_zigzag(m1)
+    if zigzag:
+        if (status == LONG and m1[-1] > zzdic['zzmax']) or\
+        (status == SHORT and m1[-1] < zzdic['zzmin']):
+            zz_cond = True
+
+    # u 또는 n
+    shape_cond = (curr_pnl > min_profit and does_m4_turnning and\
+                    ((curr_cond < -cond1 and status == SHORT) \
+                    or\
+                    (curr_cond > cond1 and status == LONG)))
+    
+    # 적당히 먹었다!
+    sat_cond = suddenly and curr_pnl > satisfying_price
+
+    if loss_cond or shape_cond or sat_cond or zz_cond:
+        print(f"!!!{_y(sym)} {pnlstr(curr_pnl)} {status} {suddenly}")
         return True, curr_pnl
     else:
         return False, curr_pnl
 
 
 def timing_to_position(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=True):
-    ## TODO: 방금 올랐을때 숏사고 방금 떨어졌을때 롱사기
     m1, m2, m3 , m4 = get_ms(binance, sym, tf, limit, wins)
     turnning_shape = whether_turnning2(m2, m3, m4, ref=0.001*0.01, ref2=0.01*0.01)  # u or n or None
     val = get_curr_conds(binance, sym)
@@ -132,7 +137,7 @@ def isitsudden(m1, status, ref=0.08):
     now = m1[-1]
     prev = m1[-2]
     percent = (now - prev)/prev*100
-    print(percent, ref)
+    # print(percent, ref)
     if status == LONG and percent > ref:
         return True
     elif status == SHORT and percent < -ref:
@@ -141,12 +146,15 @@ def isitsudden(m1, status, ref=0.08):
 
 
 def log_wallet_history(balance):
-    wallet_info = np.load('wallet_log.npy')
-    wallet_info = np.concatenate(
-                        [wallet_info, 
-                        [[time.time()], [float(balance['info']['totalWalletBalance'])]]],
-                        axis=1
-                        )  ## Date
+    try:
+        wallet_info = np.load('wallet_log.npy')
+        wallet_info = np.concatenate(
+                            [wallet_info, 
+                            [[time.time()], [float(balance['info']['totalWalletBalance'])]]],
+                            axis=1
+                            )  ## Date
+    except FileNotFoundError:
+        wallet_info = np.array([[time.time()], [float(balance['info']['totalWalletBalance'])]])
     np.save('wallet_log.npy', wallet_info)
     plt.figure()
     plt.plot(wallet_info[0], wallet_info[1])
@@ -156,8 +164,45 @@ def log_wallet_history(balance):
 
 def minmax(m):
     m = (m - m.min())/(m.max() - m.min())
+    # 원래 0~1 사이인데, 그냥 -1~1로 하고싶음
+    m = 2*(m-0.5)
     return m
 
+def inv_minmax(m, val):
+    original_val = (val/2+0.5)*(m.max() - m.min())+m.min()
+    return original_val
+
+
+# 지그재그인지 확인, w 또는 m, n&u&un은 안됨
+def handle_zigzag(m1, hour=2):
+    # 1분봉으로 2시간동안 0.9*max와 0.9*min에 몇번 도달했는지?
+    # 기준선들 각 2번 이상씩 찍으면 지그재그  (1,1)이면 상승 또는 하강, (2,1)이면 u또는 n
+    m1 = m1[-hour*60:]
+    his_2h = minmax(m1)
+    ref_h, ref_l = 0.8, -0.8
+
+    where_h = np.where(his_2h>ref_h, 1, 0).reshape(-1, 2)                 # where_h: (60, 2)
+    where_l = np.where(his_2h<ref_l, 1, 0).reshape(-1, 2)
+
+    where_h = np.where(np.sum(where_h, axis=1) > 0, 1, 0).reshape(-1, 6)  # where_h: (60) -> (10, 6)
+    where_l = np.where(np.sum(where_l, axis=1) > 0, 1, 0).reshape(-1, 6)  # 연속적인거 카운트 안하기 위해
+
+    where_h = np.where(np.sum(where_h, axis=1) > 0, 1, 0)                 # where_h: (10)
+    where_l = np.where(np.sum(where_l, axis=1) > 0, 1, 0)
+
+    h_num, l_num = 0, 0
+    for i in range(len(where_h)-1):
+        h = [where_h[i], where_h[i+1]]
+        if h == [0, 1] or h == [1, 0]:
+            h_num += 0.5
+        l = [where_l[i], where_l[i+1]]
+        if l == [0, 1] or l == [1, 0]:
+            l_num += 0.5
+    # print(where_h, h_num)
+    # print(where_l, l_num)
+    if h_num >= 2 and l_num >= 2 and (h_num+l_num) >= 5:
+        return True, {"zzmin":inv_minmax(m1, -(ref_l-0.2)), "zzmax":inv_minmax(m1, ref_h-0.2)}
+    return False, {}
 
 
 def whether_turnning2(m2, m3, m4, ref=0.001, ref2=0.002):
@@ -167,66 +212,6 @@ def whether_turnning2(m2, m3, m4, ref=0.001, ref2=0.002):
     d_m3 = np.diff(m3)      # rising?
     dd_m3 = np.diff(d_m3)   # concave?
     # ddd_m3 = np.diff(dd_m3) # curling up?
-    
-    # # m2 m3 crossed  >> 문제있음..
-    # prevs = [-3, -4, -5]
-    # diff = m2[prevs] - m3[prevs]
-    # prev_m2_undr_m3 = np.all(diff < 0)
-    # prev_m2_on_m3 = np.all(diff > 0)
-
-    # # 걍 일정시간동안 WWW 거린 애 찾아서 ..?
-    # prevs = [-3, -4, -5]
-    # diff = m2[prevs] - m3[prevs]
-    # prev_m2_undr_m3 = np.all(diff < 0)
-    # prev_m2_on_m3 = np.all(diff > 0)
-
-    # curr_diff = m2[-1] - m3[-1]
-    # curr_m2_on_m3 = curr_diff > 0
-    # curr_m2_undr_m3 = curr_diff < 0
-
-    # r = 3
-    # conref = 0.0009
-    # conref2 = 0.0007
-    # m2_concave = np.mean(dd_m2[-r:]) > conref
-    # m3_concave = np.mean(dd_m3[-r:]) > conref2
-    # hueck = dd_m2[-1] > conref
-
-    # m2_convex = np.mean(dd_m2[-r:]) < -conref
-    # m3_convex = np.mean(dd_m3[-r:]) < -conref2
-    # hueck_ = dd_m2[-1] < -conref
-
-    # concave = m2_concave and m3_concave and hueck
-    # convex = m2_convex and m3_convex and hueck_
-    str = ''
-    # print_ = False
-    # if print_:
-    #     if convex:
-    #         str += '볼록'
-    #     if concave:
-    #         str += '오목'
-    #     if curr_m2_on_m3:
-    #         str += ' m2가 위에'
-    #     if curr_m2_undr_m3:
-    #         str += ' m3가 위에'
-
-    #     str += " | m2 "
-    #     if m2_convex:
-    #         str += '볼록'
-    #     if m2_concave:
-    #         str += '오목'
-    #     if hueck or hueck_:
-    #         str += '획'
-
-    #     str += " | m3 "
-    #     if m3_convex:
-    #         str += '볼록'
-    #     if m3_concave:
-    #         str += '오목'
-    # #     print(str)
-    # if prev_m2_undr_m3 and curr_m2_on_m3 and concave:
-    #     return 'u'
-    # elif prev_m2_on_m3 and curr_m2_undr_m3 and convex:
-    #     return 'n'
     
     n = m4_turn(LONG, m4)  # n
     u = m4_turn(SHORT, m4)  # u
@@ -241,8 +226,7 @@ def whether_turnning2(m2, m3, m4, ref=0.001, ref2=0.002):
 def get_curr_cond(m, period=500):
     m = m[-period:]
     mm = minmax(m)
-    m_mean = np.mean(mm)
-    return mm[-1] - m_mean
+    return mm[-1]
     
 def show_total_pnl(transactions):
     pnls=[]
@@ -262,14 +246,6 @@ def m4_turn(status, m4, ref=0):
         m4_turn = m4_inc1<ref and m4_inc2 >ref
     return m4_turn
 
-def close(pos, tr, profit, lev=1):
-    p=1
-    if pos == SHORT:
-        p = -1
-    tr['position'] = pos
-    tr['pnl'] = str(round(profit, 4))+"%"
-    return tr
-
 
 def get_binance():
     with open("a.txt") as f:
@@ -287,3 +263,20 @@ def get_binance():
     })
     return binance
 
+# 예쁜 print를 위해
+def _b(str):
+    return f"{Fore.BLUE}{str}{Style.RESET_ALL}"
+def _r(str):
+    return f"{Fore.RED}{str}{Style.RESET_ALL}"
+def _y(str):
+    return f"{Fore.YELLOW}{str}{Style.RESET_ALL}"
+def _c(str):
+    return f"{Fore.CYAN}{str}{Style.RESET_ALL}"
+
+def pnlstr(pnlstr):
+    if float(pnlstr) < 0:
+        return _r(str(pnlstr)+"%")
+    elif float(pnlstr) > 0:
+        return _c(str(pnlstr)+"%")
+    else:
+        return str(pnlstr)+"%"

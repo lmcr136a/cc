@@ -9,7 +9,9 @@ import ccxt
 from utils import *
 
 """
-TODO: 왔다갔다하면 올랐을때 팔기
+TODO: 
+1. 왔다갔다하면 올랐을때 팔기
+2. 방금 올랐을때 숏사고 방금 떨어졌을때 롱사기
 """
 
 class Trader():
@@ -25,7 +27,7 @@ class Trader():
         self.lev = 20
         self.wins = [1, 11, 20, 40]
         self.limit = self.wins[-1]*10           # for past_data
-        self.max_loss = max(-2*self.lev, -30)   # 마이너스인거 확인
+        self.max_loss = max(-2*self.lev, -25)   # 마이너스인거 확인
         self.min_profit = 0.15*self.lev          # 20 일때 3%
         
         if not symbol:
@@ -50,7 +52,6 @@ class Trader():
 
         actions = inspect_market(self.binance, self.sym, self.satisfying_profit, self.buying_cond)
         self.short_only, self.long_only, self.buying_cond, self.satisfying_profit = actions
-        
 
     def update_wallet(self, balance=None):
         if not balance:
@@ -138,13 +139,10 @@ class Trader():
 
     def run(self):
         print("\nStarting status: ", self.status)
-        transactions = []
-        tr = {}
-        tr['ent'] = [0, 0]
         iter = 0
         self.anxious = 1
         self.pre_pnls = []
-        while len(transactions) < self.order_num: 
+        while 1: 
             m1, m2, m3, m4 = get_ms(self.binance, self.sym, self.tf, self.limit, self.wins)
             
             if not self.status:
@@ -156,17 +154,14 @@ class Trader():
                 elif self.status == SHORT:
                     self.e_short()
                 
-                if self.status:
-                    tr['ent'] = [iter, m1[-1]]
 
             else :
-                howmuchtime = iter - tr['ent'][0]
                 # 시간이 오래 지날수록 욕심을 버리기
-                if (howmuchtime)%(3600/self.time_interval) == 0 and howmuchtime > 0: # 3600 == 1h
+                if (iter)%((3600/4)/self.time_interval) == 0 and iter > 0: # 3600 == 1h
                     loss_count = np.sum(np.where(np.array(self.pre_pnls) < 0, 1, 0))
                     loss_ratio = loss_count/len(self.pre_pnls)  # 값이 크면 계속 잃었던 것
                     self.anxious *= (1.0 - 0.3*loss_ratio)
-                    self.anxious = max(self.anxious, 1.2/self.satisfying_profit)
+                    self.anxious = round(max(self.anxious, 1.2/self.satisfying_profit), 2)
 
                 satisfying_price = self.satisfying_profit*self.anxious
                 curr_cond = get_curr_cond(m1, period=500)
@@ -175,7 +170,7 @@ class Trader():
                 # curr pnl을 return하는건 그냥임
                 close_position, curr_pnl = timing_to_close(binance=self.binance, sym=self.sym, status=self.status, 
                         curr_cond=curr_cond, does_m4_turnning=does_m4_turnning, m1=m1, satisfying_price=satisfying_price, 
-                        max_loss=self.max_loss, min_profit=self.min_profit, cond1=self.cond1, howmuchtime=howmuchtime)
+                        max_loss=self.max_loss, min_profit=self.min_profit, cond1=self.cond1, howmuchtime=iter)
                 self.pre_pnls.append(curr_pnl)
                 
                 if close_position:
@@ -183,19 +178,7 @@ class Trader():
                         self.e_short(close=True)
                     else:
                         self.e_long(close=True)
-                        
-                    tr['close'] = [iter, m1[-1]]
-                    tr = close(self.status, tr, curr_pnl)
-                    transactions.append(tr)
-                    tr = {}
-                    self.status = None
-                    self.anxious = 1
-                    with open("transactions.txt", 'w') as f:
-                        f.write(str(transactions))
-                        
-                    self.update_wallet()
-                    price = float(self.inquire_curr_price())
-                    self.amount = cal_compound_amt(self.wallet_usdt, self.lev, price, self.symnum)
+                    return 0  # finish the iteration
                 
             time.sleep(self.time_interval)
             iter += 1
@@ -221,7 +204,7 @@ if __name__ == "__main__":
                         type=bool,
                         )
     args = parser.parse_args()
-    sym = args.symbol
+    sym = args.symbol if '/USDT' in args.symbol else args.symbol +'/USDT'
     while 1:
         trader = Trader(sym, args.symnum)
         trader.run()
