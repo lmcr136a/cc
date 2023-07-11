@@ -99,7 +99,7 @@ def inspect_market(binance, sym, satisfying_pnl, buying_cond=0.4):
                 actions = a_x1()
         elif st2 == "BULL":          # 12시간동안 상승
             if st3 == "BEAR":           # 36~12 ㅈㄴ떨어짐 12부터 조금씩 오르다가 4전부터 다시 하락
-                actions = a_s2()
+                actions = a_x1()
             elif st3 == "BULL":         
                 actions = a_l1()
             else:                       # 36~12하락 12부터 상승후 지그재그
@@ -122,11 +122,11 @@ def inspect_market(binance, sym, satisfying_pnl, buying_cond=0.4):
                 actions = a_s2()
         elif st2 == "BULL":          # 36상승 12 상승
             if st3 == "BEAR":           # 도박..?
-                actions = a_x2()
+                actions = a_s2()
             elif st3 == "BULL":         # 4시간동안 상승
                 actions = a_l1()
             else:                       # 36 상승 12 상승 지그재그
-                actions = a_l2()
+                actions = a_x1()
         else:
             if st3 == "BEAR":       # 36 상승 12 지그재그 4 하락
                 actions = a_l2()
@@ -140,7 +140,7 @@ def inspect_market(binance, sym, satisfying_pnl, buying_cond=0.4):
             if st3 == "BEAR":           # 이건 36~12 사이엔 상승하다가 12때부터 떨어지는거
                 actions = a_s1()
             elif st3 =="BULL":          # 36~12 상승 12~ㅈㄴ떨어짐 4시간전부터 상승
-                actions = a_x2()
+                actions = a_l2()
             else:                       # 36~12 상승 12~ 하락 지그재그
                 actions = a_x1()
         elif st2 == "BULL":          # 36~12 하락하다가 12시간동안 상승
@@ -149,14 +149,14 @@ def inspect_market(binance, sym, satisfying_pnl, buying_cond=0.4):
             elif st3 == "BULL":         # 36~12 하락하다가 12시간전부터 오르기
                 actions = a_l1()
             else:                       # 36~12 12~4 4~
-                actions = a_s2()
+                actions = a_x1()
         else:
             if st3 == "BEAR":       # 36 지그재그 12 지그재그 4 하락
                 actions = a_s2()
             elif st3 == "BULL":     # 36 지그재그 12 지그재그 4 상승
                 actions = a_l2()
             else:                   # 36 지그재그 12 지그재그 4 지그재그
-                actions = a_s2()
+                actions = a_x1()
 
     short_only, long_only, new_cond, new_sat_pnl = actions
     if new_cond:
