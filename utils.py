@@ -89,21 +89,27 @@ def timing_to_close(binance, sym, status, curr_cond, does_m4_turnning,
     suddenly = isitsudden(m1, status)
     print(f"{sym} {howmuchtime} {status}] PRICE: {round(m1[-1], 2)} PNL: {profit} ({pnlstr(round(curr_pnl, 2))}), COND: {round(curr_cond, 2)} SAT_P: {satisfying_price}")
     
-    if curr_pnl < max_loss \
-        or\
-    (
-        curr_pnl > min_profit \
-            and\
-        does_m4_turnning
-            and\
-        (
-            (curr_cond < -cond1 and status == SHORT) \
-                or\
-            (curr_cond > cond1 and status == LONG)
-        )
-    )\
-        or\
-    (suddenly and curr_pnl > satisfying_price):
+    # 이 이상 잃을 수는 없다
+    loss_cond = curr_pnl < max_loss
+
+    # 지그재그에서 위쪽이면 롱 팔고 아래면 숏 팔고
+    zz_cond = False
+    zigzag, zzdic = handle_zigzag(m1)
+    if zigzag:
+        if (status == LONG and m1[-1] > zzdic['zzmax']) or\
+        (status == SHORT and m1[-1] < zzdic['zzmin']):
+            zz_cond = True
+
+    # u 또는 n
+    shape_cond = (curr_pnl > min_profit and does_m4_turnning and\
+                    ((curr_cond < -cond1 and status == SHORT) \
+                    or\
+                    (curr_cond > cond1 and status == LONG)))
+    
+    # 적당히 먹었다!
+    sat_cond = suddenly and curr_pnl > satisfying_price
+
+    if loss_cond or shape_cond or sat_cond or zz_cond:
         print(f"!!!{_y(sym)} {pnlstr(curr_pnl)} {status} {suddenly}")
         return True, curr_pnl
     else:
@@ -140,12 +146,15 @@ def isitsudden(m1, status, ref=0.08):
 
 
 def log_wallet_history(balance):
-    wallet_info = np.load('wallet_log.npy')
-    wallet_info = np.concatenate(
-                        [wallet_info, 
-                        [[time.time()], [float(balance['info']['totalWalletBalance'])]]],
-                        axis=1
-                        )  ## Date
+    try:
+        wallet_info = np.load('wallet_log.npy')
+        wallet_info = np.concatenate(
+                            [wallet_info, 
+                            [[time.time()], [float(balance['info']['totalWalletBalance'])]]],
+                            axis=1
+                            )  ## Date
+    except FileNotFoundError:
+        wallet_info = np.array([[time.time()], [float(balance['info']['totalWalletBalance'])]])
     np.save('wallet_log.npy', wallet_info)
     plt.figure()
     plt.plot(wallet_info[0], wallet_info[1])
@@ -155,8 +164,45 @@ def log_wallet_history(balance):
 
 def minmax(m):
     m = (m - m.min())/(m.max() - m.min())
+    # 원래 0~1 사이인데, 그냥 -1~1로 하고싶음
+    m = 2*(m-0.5)
     return m
 
+def inv_minmax(m, val):
+    original_val = (val/2+0.5)*(m.max() - m.min())+m.min()
+    return original_val
+
+
+# 지그재그인지 확인, w 또는 m, n&u&un은 안됨
+def handle_zigzag(m1, hour=2):
+    # 1분봉으로 2시간동안 0.9*max와 0.9*min에 몇번 도달했는지?
+    # 기준선들 각 2번 이상씩 찍으면 지그재그  (1,1)이면 상승 또는 하강, (2,1)이면 u또는 n
+    m1 = m1[-hour*60:]
+    his_2h = minmax(m1)
+    ref_h, ref_l = 0.8, -0.8
+
+    where_h = np.where(his_2h>ref_h, 1, 0).reshape(-1, 2)                 # where_h: (60, 2)
+    where_l = np.where(his_2h<ref_l, 1, 0).reshape(-1, 2)
+
+    where_h = np.where(np.sum(where_h, axis=1) > 0, 1, 0).reshape(-1, 6)  # where_h: (60) -> (10, 6)
+    where_l = np.where(np.sum(where_l, axis=1) > 0, 1, 0).reshape(-1, 6)  # 연속적인거 카운트 안하기 위해
+
+    where_h = np.where(np.sum(where_h, axis=1) > 0, 1, 0)                 # where_h: (10)
+    where_l = np.where(np.sum(where_l, axis=1) > 0, 1, 0)
+
+    h_num, l_num = 0, 0
+    for i in range(len(where_h)-1):
+        h = [where_h[i], where_h[i+1]]
+        if h == [0, 1] or h == [1, 0]:
+            h_num += 0.5
+        l = [where_l[i], where_l[i+1]]
+        if l == [0, 1] or l == [1, 0]:
+            l_num += 0.5
+    # print(where_h, h_num)
+    # print(where_l, l_num)
+    if h_num >= 2 and l_num >= 2 and (h_num+l_num) >= 5:
+        return True, {"zzmin":inv_minmax(m1, -(ref_l-0.2)), "zzmax":inv_minmax(m1, ref_h-0.2)}
+    return False, {}
 
 
 def whether_turnning2(m2, m3, m4, ref=0.001, ref2=0.002):
@@ -180,8 +226,7 @@ def whether_turnning2(m2, m3, m4, ref=0.001, ref2=0.002):
 def get_curr_cond(m, period=500):
     m = m[-period:]
     mm = minmax(m)
-    m_mean = np.mean(mm)
-    return mm[-1] - m_mean
+    return mm[-1]
     
 def show_total_pnl(transactions):
     pnls=[]
