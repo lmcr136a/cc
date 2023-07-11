@@ -154,13 +154,10 @@ class Trader():
                 elif self.status == SHORT:
                     self.e_short()
                 
-                if self.status:
-                    tr['ent'] = [iter, m1[-1]]
 
             else :
-                howmuchtime = iter - tr['ent'][0]
                 # 시간이 오래 지날수록 욕심을 버리기
-                if (howmuchtime)%((3600/4)/self.time_interval) == 0 and howmuchtime > 0: # 3600 == 1h
+                if (iter)%((3600/4)/self.time_interval) == 0 and iter > 0: # 3600 == 1h
                     loss_count = np.sum(np.where(np.array(self.pre_pnls) < 0, 1, 0))
                     loss_ratio = loss_count/len(self.pre_pnls)  # 값이 크면 계속 잃었던 것
                     self.anxious *= (1.0 - 0.3*loss_ratio)
@@ -173,7 +170,7 @@ class Trader():
                 # curr pnl을 return하는건 그냥임
                 close_position, curr_pnl = timing_to_close(binance=self.binance, sym=self.sym, status=self.status, 
                         curr_cond=curr_cond, does_m4_turnning=does_m4_turnning, m1=m1, satisfying_price=satisfying_price, 
-                        max_loss=self.max_loss, min_profit=self.min_profit, cond1=self.cond1, howmuchtime=howmuchtime)
+                        max_loss=self.max_loss, min_profit=self.min_profit, cond1=self.cond1, howmuchtime=iter)
                 self.pre_pnls.append(curr_pnl)
                 
                 if close_position:
