@@ -70,12 +70,12 @@ def get_curr_pnl(binance, sym):
             return round(pnl,2), round(float(pos['unrealizedProfit']), 2)
 
 
-def timing_to_close(binance, sym, status, does_m4_turnning, 
+def timing_to_close(binance, sym, status, m4_shape, 
                     m1, satisfying_price, max_loss, min_profit, cond1, howmuchtime):
     curr_pnl, profit = get_curr_pnl(binance, sym.replace("/", ""))
     suddenly = isitsudden(m1, status)
-    print(f"{sym} {howmuchtime} {status}] PRICE: {round(m1[-1], 2)} PNL: {profit} ({pnlstr(round(curr_pnl, 2))}), COND: {round(curr_cond, 2)} SAT_P: {satisfying_price}")
-    mvmt = curr_movement(binance, sym, minute=3)
+    print(f"{sym} {howmuchtime} {status}] PRICE: {round(m1[-1], 2)} PNL: {profit} ({pnlstr(round(curr_pnl, 2))}), SAT_P: {satisfying_price}")
+    mvmt = curr_movement(m1, minute=4)
     # 이 이상 잃을 수는 없다
     loss_cond = curr_pnl < max_loss
 
@@ -88,16 +88,15 @@ def timing_to_close(binance, sym, status, does_m4_turnning,
             zz_cond = True
 
     # u 또는 n
-    shape_cond = (curr_pnl > min_profit and does_m4_turnning and\
-                    ((mvmt==FALLING and status == SHORT) \
+    shape_cond = (((m4_shape=='u' and mvmt==FALLING and status == SHORT) \
                     or\
-                    (mvmt==RISING > cond1 and status == LONG)))
+                    (m4_shape=='n' and mvmt==RISING and status == LONG)))
     
     # 적당히 먹었다!
     sat_cond = suddenly and curr_pnl > satisfying_price
 
-    if loss_cond or shape_cond or sat_cond or zz_cond:
-        print(f"!!!{_y(sym)} {pnlstr(curr_pnl)} {status} {suddenly}")
+    if loss_cond or sat_cond or ((zz_cond or shape_cond) and curr_pnl > min_profit):
+        print(f"!!!{_y(sym)} {pnlstr(curr_pnl)} {loss_cond} {shape_cond} {sat_cond} {zz_cond}")
         return True, curr_pnl
     else:
         return False, curr_pnl
@@ -105,8 +104,9 @@ def timing_to_close(binance, sym, status, does_m4_turnning,
 
 def timing_to_position(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=True):
     m1, m2, m3 , m4 = get_ms(binance, sym, tf, limit, wins)
-    turnning_shape = whether_turnning2(m2, m3, m4, ref=0.001*0.01, ref2=0.01*0.01)  # u or n or None
-    mvmt = curr_movement(binance, sym)
+    turnning_shape = m4_turn(m4)
+    
+    mvmt = curr_movement(m1)
     # pre_cond = np.mean(val[1:])
     if pr:
         print(f'{sym} PRICE:', m1[-1], " SHAPE: ", turnning_shape, mvmt)
@@ -122,8 +122,7 @@ def timing_to_position(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=
         return None
 
 
-def curr_movement(binance, sym, minute=2):
-    m = past_data(binance, sym, '1m', limit=minute)['close']
+def curr_movement(m, minute=2):
     diff = []
     for i in range(len(m)-1):
         diff.append(m[i+1] - m[i])
@@ -208,24 +207,6 @@ def handle_zigzag(m1, hour=2):
     return False, {}
 
 
-def whether_turnning2(m2, m3, m4, ref=0.001, ref2=0.002):
-    d_m2 = np.diff(m2)      # rising?
-    dd_m2 = np.diff(d_m2)   # concave?
-    # ddd_m2 = np.diff(dd_m2) # curling up?
-    d_m3 = np.diff(m3)      # rising?
-    dd_m3 = np.diff(d_m3)   # concave?
-    # ddd_m3 = np.diff(dd_m3) # curling up?
-    
-    n = m4_turn(LONG, m4)  # n
-    u = m4_turn(SHORT, m4)  # u
-
-    if u:
-        return 'u'
-    elif n:
-        return 'n'
-    return None
-
-
 # def get_curr_cond(m, period=500):
 #     m = m[-period:]
 #     mm = minmax(m)
@@ -239,15 +220,23 @@ def show_total_pnl(transactions):
     return total_pnl
 
 
-def m4_turn(status, m4, ref=0):
+def m4_turn(m4, ref=0.005):
     i = -1
-    m4_inc1 = m4[i-2] - m4[i-4] 
-    m4_inc2 = m4[i] - m4[i-1] 
-    if status == LONG: # n
-        m4_turn = m4_inc1>ref and m4_inc2 <ref
-    else:
-        m4_turn = m4_inc1<ref and m4_inc2 >ref
-    return m4_turn
+    m4_inc1 = (m4[i-3] - m4[i-5])/m4[i-5]*100
+    m4_inc2 = (m4[i-4] - m4[i-6])/m4[i-6]*100
+    m4_inc3 = (m4[i-5] - m4[i-7])/m4[i-7]*100
+
+    m4_dec_now1 = (m4[i] - m4[i-1])/m4[i-1]*100
+    m4_dec_now2 = (m4[i-1] - m4[i-2])/m4[i-2]*100
+
+    # n
+    m4_increased = m4_inc1 >0 and m4_inc2 >ref and m4_inc3 >ref
+    if m4_increased and m4_dec_now1 < 0 and m4_dec_now2 < -ref:
+        return 'n'
+    # u
+    m4_decreased = m4_inc1 <0 and m4_inc2 < -ref and m4_inc3 < -ref
+    if m4_decreased and m4_dec_now1 > 0 and m4_dec_now2 > ref:
+        return 'u'
 
 
 def get_binance():
