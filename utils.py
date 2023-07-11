@@ -111,7 +111,6 @@ def timing_to_close(binance, sym, status, curr_cond, does_m4_turnning,
 
 
 def timing_to_position(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=True):
-    ## TODO: 방금 올랐을때 숏사고 방금 떨어졌을때 롱사기
     m1, m2, m3 , m4 = get_ms(binance, sym, tf, limit, wins)
     turnning_shape = whether_turnning2(m2, m3, m4, ref=0.001*0.01, ref2=0.01*0.01)  # u or n or None
     val = get_curr_conds(binance, sym)
@@ -168,66 +167,6 @@ def whether_turnning2(m2, m3, m4, ref=0.001, ref2=0.002):
     dd_m3 = np.diff(d_m3)   # concave?
     # ddd_m3 = np.diff(dd_m3) # curling up?
     
-    # # m2 m3 crossed  >> 문제있음..
-    # prevs = [-3, -4, -5]
-    # diff = m2[prevs] - m3[prevs]
-    # prev_m2_undr_m3 = np.all(diff < 0)
-    # prev_m2_on_m3 = np.all(diff > 0)
-
-    # # 걍 일정시간동안 WWW 거린 애 찾아서 ..?
-    # prevs = [-3, -4, -5]
-    # diff = m2[prevs] - m3[prevs]
-    # prev_m2_undr_m3 = np.all(diff < 0)
-    # prev_m2_on_m3 = np.all(diff > 0)
-
-    # curr_diff = m2[-1] - m3[-1]
-    # curr_m2_on_m3 = curr_diff > 0
-    # curr_m2_undr_m3 = curr_diff < 0
-
-    # r = 3
-    # conref = 0.0009
-    # conref2 = 0.0007
-    # m2_concave = np.mean(dd_m2[-r:]) > conref
-    # m3_concave = np.mean(dd_m3[-r:]) > conref2
-    # hueck = dd_m2[-1] > conref
-
-    # m2_convex = np.mean(dd_m2[-r:]) < -conref
-    # m3_convex = np.mean(dd_m3[-r:]) < -conref2
-    # hueck_ = dd_m2[-1] < -conref
-
-    # concave = m2_concave and m3_concave and hueck
-    # convex = m2_convex and m3_convex and hueck_
-    str = ''
-    # print_ = False
-    # if print_:
-    #     if convex:
-    #         str += '볼록'
-    #     if concave:
-    #         str += '오목'
-    #     if curr_m2_on_m3:
-    #         str += ' m2가 위에'
-    #     if curr_m2_undr_m3:
-    #         str += ' m3가 위에'
-
-    #     str += " | m2 "
-    #     if m2_convex:
-    #         str += '볼록'
-    #     if m2_concave:
-    #         str += '오목'
-    #     if hueck or hueck_:
-    #         str += '획'
-
-    #     str += " | m3 "
-    #     if m3_convex:
-    #         str += '볼록'
-    #     if m3_concave:
-    #         str += '오목'
-    # #     print(str)
-    # if prev_m2_undr_m3 and curr_m2_on_m3 and concave:
-    #     return 'u'
-    # elif prev_m2_on_m3 and curr_m2_undr_m3 and convex:
-    #     return 'n'
-    
     n = m4_turn(LONG, m4)  # n
     u = m4_turn(SHORT, m4)  # u
 
@@ -261,14 +200,6 @@ def m4_turn(status, m4, ref=0):
     else:
         m4_turn = m4_inc1<ref and m4_inc2 >ref
     return m4_turn
-
-def close(pos, tr, profit, lev=1):
-    p=1
-    if pos == SHORT:
-        p = -1
-    tr['position'] = pos
-    tr['pnl'] = str(round(profit, 4))+"%"
-    return tr
 
 
 def get_binance():

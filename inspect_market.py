@@ -28,11 +28,11 @@ def bull_or_bear(binance, sym, mode=1):
     mode 2: 12시간 > 15m * (4*12=48)개
     mode 3: 36시간 > 1h * 36개
     """
-    if mode == 1:
+    if mode == 3:
         tf, n, a = '5m', 48, 2
     elif mode == 2:
         tf, n, a = '15m', 48, 1.5
-    elif mode == 3:
+    elif mode == 1:
         tf, n, a = '1h', 36, 1
     df = past_data(binance, sym=sym, tf=tf, limit=n)
     m = (df['high']+df['low'])/2  # df['close']로 해도 되는데 그냥 이렇게 함
@@ -84,10 +84,10 @@ def a_x2():
 
 
 def inspect_market(binance, sym, satisfying_pnl, buying_cond=0.4):
-    st1 = bull_or_bear(binance, sym=sym, mode=3)
+    st1 = bull_or_bear(binance, sym=sym, mode=1)
     st2 = bull_or_bear(binance, sym=sym, mode=2)
-    st3 = bull_or_bear(binance, sym=sym, mode=1)
-    print(f"**{sym}__[4h~ {st3}]_[12h~ {st2}]_[36h~ {st1}]")
+    st3 = bull_or_bear(binance, sym=sym, mode=3)
+    print(f"**{sym}__[36h~ {st1}]_[12h~ {st2}]_[4h~ {st3}]")
 
     if st1 == 'BEAR':           # 36시간동안 하락
         if st2 == "BEAR":           # 12시간동안 하락
