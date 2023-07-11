@@ -204,7 +204,7 @@ if __name__ == "__main__":
                         type=bool,
                         )
     args = parser.parse_args()
-    sym = args.symbol
+    sym = args.symbol if '/USDT' in args.symbol else args.symbol +'/USDT'
     while 1:
         trader = Trader(sym, args.symnum)
         trader.run()
