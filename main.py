@@ -69,14 +69,12 @@ class Trader():
         log_wallet_history(balance)
         # USDT
         self.update_wallet(balance)
-
         for position in positions:
             amt = float(position['positionAmt'])
             if amt > 0 and position["symbol"] != self.sym.replace("/", ""):
                 self.other_running_sym_num += 1
         self.symnum -= self.other_running_sym_num 
         print(f"other_running_sym_num: {self.other_running_sym_num}  self.symnum: {self.symnum}")
-
         for position in positions:
             amt = float(position['positionAmt'])
             if position["symbol"] == self.sym.replace("/", ""):
@@ -204,7 +202,7 @@ if __name__ == "__main__":
                         type=bool,
                         )
     args = parser.parse_args()
-    sym = args.symbol if '/USDT' in args.symbol else args.symbol +'/USDT'
+    sym = args.symbol if not args.symbol or '/USDT' in args.symbol else args.symbol + '/USDT'
     while 1:
         trader = Trader(sym, args.symnum)
         trader.run()

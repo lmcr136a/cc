@@ -21,11 +21,9 @@ def cal_compound_amt(wallet_usdt, lev, price, symnum):
 
 
 def select_sym(binance, __buying_cond, __pre_cond, tf, limit, wins):
-    NEW_SYM = []
     while 1:
         for sym in SYMLIST:  # 0705 0.55초 걸림
             buying_cond, pre_cond = __buying_cond, __pre_cond
-
             actions = inspect_market(binance, sym, 1, buying_cond)
             short_only, long_only, buying_cond, _ = actions
         
@@ -49,7 +47,7 @@ def select_sym(binance, __buying_cond, __pre_cond, tf, limit, wins):
                 time.sleep(0.4)
 
         # with open("syms.txt", 'w') as f:
-        #     f.write(str(NEW_SYM))
+        #     f.write(str(names))
         # exit()
 
 def get_ms(binance, sym, tf, limit, wins):
