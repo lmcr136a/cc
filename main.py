@@ -31,7 +31,8 @@ class Trader():
         self.min_profit = 0.15*self.lev          # 20 일때 3%
         
         if not symbol:
-            symbol = select_sym(self.binance, self.buying_cond, self.pre_cond, self.tf, self.limit, self.wins)
+            symbol = select_sym(self.binance, self.buying_cond, self.pre_cond, 
+                                self.tf, self.limit, self.wins, self.symnum)
         self.sym = symbol
 
         # 갑자기 올랐을때/ 떨어졌을 때 satisfying_profit 넘으면 close
@@ -140,9 +141,12 @@ class Trader():
         iter = 0
         self.anxious = 1
         self.pre_pnls = []
+        self.missed_timing = 0
         while 1: 
             m1, m2, m3, m4 = get_ms(self.binance, self.sym, self.tf, self.limit, self.wins)
             
+            if self.missed_timing > 10:
+                break
             if not self.status:
             
                 self.status = timing_to_position(self.binance, self.sym, buying_cond=self.buying_cond, pre_cond=self.pre_cond, tf=self.tf, limit=self.limit, wins=self.wins)
@@ -151,22 +155,22 @@ class Trader():
                     self.e_long()
                 elif self.status == SHORT:
                     self.e_short()
-                
+                if not self.status:
+                    self.missed_timing += 1
 
             else :
                 # 시간이 오래 지날수록 욕심을 버리기
                 if (iter)%((3600/4)/self.time_interval) == 0 and iter > 0: # 3600 == 1h
                     loss_count = np.sum(np.where(np.array(self.pre_pnls) < 0, 1, 0))
                     loss_ratio = loss_count/len(self.pre_pnls)  # 값이 크면 계속 잃었던 것
-                    self.anxious *= (1.0 - 0.3*loss_ratio)
-                    self.anxious = round(max(self.anxious, self.min_profit), 2)
+                    self.satisfying_profit *= 0.8
+                    self.satisfying_profit = round(max(self.satisfying_profit, self.min_profit), 2)
 
-                satisfying_price = self.satisfying_profit*self.anxious
                 m4_shape = m4_turn(m4)
                 
                 # curr pnl을 return하는건 그냥임
                 close_position, curr_pnl = timing_to_close(binance=self.binance, sym=self.sym, status=self.status, 
-                        m4_shape=m4_shape, m1=m1, satisfying_price=satisfying_price, 
+                        m4_shape=m4_shape, m1=m1, satisfying_price=self.satisfying_profit, 
                         max_loss=self.max_loss, min_profit=self.min_profit, cond1=self.cond1, howmuchtime=iter)
                 self.pre_pnls.append(curr_pnl)
                 

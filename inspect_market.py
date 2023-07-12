@@ -59,7 +59,7 @@ def bull_or_bear(binance, sym, mode=1):
 """
 
 cond_lv1, cond_lv2 = 0.05, -0.15
-stsfng_lv1, stsfng_lv2 = 5, 3  # 이만큼만 먹고 나오기
+stsfng_lv1, stsfng_lv2 = 6, 4  # 이만큼만 먹고 나오기
 
 # Return short_only, long_only, buying_cond, satisfying_pnl or False
 def a_l1():

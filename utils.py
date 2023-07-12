@@ -14,7 +14,9 @@ FALLING = "Falling"
 LONG = "Long"
 SHORT = "Short"
 
-with open("syms.txt", 'r') as f:
+CALM = 3
+
+with open("symlist.txt", 'r') as f:
     SYMLIST = eval(f.read())
 print(len(SYMLIST))
 
@@ -22,7 +24,7 @@ def cal_compound_amt(wallet_usdt, lev, price, symnum):
     return np.floor(wallet_usdt*lev/float(price)*0.9/float(symnum))
 
 
-def select_sym(binance, __buying_cond, __pre_cond, tf, limit, wins):
+def select_sym(binance, __buying_cond, __pre_cond, tf, limit, wins, symnum):
     while 1:
         for sym in SYMLIST:  # 0705 0.55초 걸림
             buying_cond, pre_cond = __buying_cond, __pre_cond
@@ -42,11 +44,11 @@ def select_sym(binance, __buying_cond, __pre_cond, tf, limit, wins):
                 for position in positions:
                     if position["symbol"] == sym.replace("/", ""):
                         amt = float(position['positionAmt'])
-                        if amt == 0 and "ETH" not in sym and "BCH" not in sym and "DASH" not in sym:
+                        if amt == 0 and sym.split("/")[0] not in ["BTC", "ETH", "BCH", "DASH", "XMR", "QNT"]:
                             print(f"\n!\n!\n{sym} OOOOO")
                             return sym
             else:
-                time.sleep(0.4)
+                time.sleep(0.2*symnum)
 
         # with open("syms.txt", 'w') as f:
         #     f.write(str(names))
@@ -75,7 +77,7 @@ def timing_to_close(binance, sym, status, m4_shape,
     curr_pnl, profit = get_curr_pnl(binance, sym.replace("/", ""))
     suddenly = isitsudden(m1, status)
     print(f"{sym} {howmuchtime} {status}] PRICE: {round(m1[-1], 2)} PNL: {profit} ({pnlstr(round(curr_pnl, 2))}), SAT_P: {satisfying_price}")
-    mvmt = curr_movement(m1, minute=4)
+    mvmt, last_diff = curr_movement(m1, minute=4)
     # 이 이상 잃을 수는 없다
     loss_cond = curr_pnl < max_loss
 
@@ -88,9 +90,9 @@ def timing_to_close(binance, sym, status, m4_shape,
             zz_cond = True
 
     # u 또는 n
-    shape_cond = (((m4_shape=='u' and mvmt==FALLING and status == SHORT) \
+    shape_cond = (((m4_shape=='u' and mvmt==FALLING and last_diff < CALM and status == SHORT) \
                     or\
-                    (m4_shape=='n' and mvmt==RISING and status == LONG)))
+                    (m4_shape=='n' and mvmt==RISING and last_diff < CALM and status == LONG)))
     
     # 적당히 먹었다!
     sat_cond = suddenly and curr_pnl > satisfying_price
@@ -106,17 +108,16 @@ def timing_to_position(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=
     m1, m2, m3 , m4 = get_ms(binance, sym, tf, limit, wins)
     turnning_shape = m4_turn(m4)
     
-    mvmt = curr_movement(m1)
+    mvmt, last_diff = curr_movement(m1)
     # pre_cond = np.mean(val[1:])
     if pr:
         print(f'{sym} PRICE:', m1[-1], " SHAPE: ", turnning_shape, mvmt)
 
     # 오른게 더오르고 내린게 더내려간다
     # 그냥 약간 올랐을때로 변경
-
-    if turnning_shape == 'u' and mvmt == FALLING:
+    if turnning_shape == 'u' and mvmt == RISING and last_diff < CALM:
         return LONG
-    elif turnning_shape == 'n' and mvmt == RISING:
+    elif turnning_shape == 'n' and mvmt == FALLING and last_diff < CALM:
         return SHORT
     else:
         return None
@@ -127,12 +128,14 @@ def curr_movement(m, minute=2):
     for i in range(len(m)-1):
         diff.append(m[i+1] - m[i])
     d = np.sum(diff)
-    if d > 0 and (m[-1] - m[-2] > 0):
-        return RISING
-    elif d < 0 and (m[-1] - m[-2] < 0):
-        return FALLING
+
+    last_diff = (m[-1] - m[-2])/m[-2]
+    if d > 0 and ( last_diff > 0):
+        return RISING, last_diff
+    elif d < 0 and (last_diff < 0):
+        return FALLING, last_diff
     else:
-        return "~"
+        return "~", last_diff
 
 
 def isitsudden(m1, status, ref=0.085):
