@@ -12,6 +12,7 @@ from utils import *
 TODO: 
 1. 왔다갔다하면 올랐을때 팔기
 2. 방금 올랐을때 숏사고 방금 떨어졌을때 롱사기
+3. 수익 내는거 4%만 먹고 나오는게 아니라 더 있을 방법은..? < 사람으로 생각해도 딱히 없는듯
 """
 
 class Trader():
@@ -28,7 +29,7 @@ class Trader():
         self.wins = [1, 11, 20, 20]
         self.limit = self.wins[-1]*10           # for past_data
         self.max_loss = max(-2*self.lev, -25)   # 마이너스인거 확인
-        self.min_profit = 0.15*self.lev          # 20 일때 3%
+        self.min_profit = 0.25*self.lev          # 20 일때 5%
         
         if not symbol:
             symbol = select_sym(self.binance, self.buying_cond, self.pre_cond, 
@@ -36,7 +37,7 @@ class Trader():
         self.sym = symbol
 
         # 갑자기 올랐을때/ 떨어졌을 때 satisfying_profit 넘으면 close
-        self.satisfying_profit = 0.5*self.lev   # 20 일때 8%
+        self.satisfying_profit = 0.5*self.lev  # 10%
 
         self.time_interval = 2
         self.tf_ = int(self.tf[:-1])
@@ -160,7 +161,7 @@ class Trader():
 
             else :
                 # 시간이 오래 지날수록 욕심을 버리기
-                if (iter)%((3600/4)/self.time_interval) == 0 and iter > 0: # 3600 == 1h
+                if (iter)%((3600)/self.time_interval) == 0 and iter > 0: # 3600 == 1h
                     loss_count = np.sum(np.where(np.array(self.pre_pnls) < 0, 1, 0))
                     loss_ratio = loss_count/len(self.pre_pnls)  # 값이 크면 계속 잃었던 것
                     self.satisfying_profit *= 0.8

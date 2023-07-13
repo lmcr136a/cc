@@ -44,7 +44,7 @@ def select_sym(binance, __buying_cond, __pre_cond, tf, limit, wins, symnum):
                 for position in positions:
                     if position["symbol"] == sym.replace("/", ""):
                         amt = float(position['positionAmt'])
-                        if amt == 0 and sym.split("/")[0] not in ["BTC", "ETH", "BCH", "DASH", "XMR", "QNT"]:
+                        if amt == 0 and sym.split("/")[0] not in ["BTC", "ETH", "BCH", "DASH", "XMR", "QNT", "BNB"]:
                             print(f"\n!\n!\n{sym} OOOOO")
                             return sym
             else:
@@ -76,7 +76,7 @@ def timing_to_close(binance, sym, status, m4_shape,
                     m1, satisfying_price, max_loss, min_profit, cond1, howmuchtime):
     curr_pnl, profit = get_curr_pnl(binance, sym.replace("/", ""))
     suddenly = isitsudden(m1, status)
-    print(f"{sym} {howmuchtime} {status}] PRICE: {round(m1[-1], 2)} PNL: {profit} ({pnlstr(round(curr_pnl, 2))}), SAT_P: {satisfying_price}")
+    print(f"{sym} {howmuchtime} {status}] PNL: {profit} ({pnlstr(round(curr_pnl, 2))}), SAT_P: {satisfying_price}")
     mvmt, last_diff = curr_movement(m1, minute=4)
     # 이 이상 잃을 수는 없다
     loss_cond = curr_pnl < max_loss
@@ -115,10 +115,22 @@ def timing_to_position(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=
 
     # 오른게 더오르고 내린게 더내려간다
     # 그냥 약간 올랐을때로 변경
-    if turnning_shape == 'u' and mvmt == RISING and last_diff < CALM:
-        return LONG
-    elif turnning_shape == 'n' and mvmt == FALLING and last_diff < CALM:
-        return SHORT
+    # if turnning_shape == 'u' and mvmt == FALLING and last_diff < CALM:
+    #     return LONG
+    # elif turnning_shape == 'n' and mvmt == RISING and last_diff < CALM:
+    #     return SHORT
+
+    only_increased = np.all(np.diff(m4[-60:]) > 0)  # 1시간..
+    only_decreased = np.all(np.diff(m4[-60:]) > 0)
+    print(only_increased, only_decreased)
+
+    if only_increased:
+        if mvmt == FALLING or last_diff < 0:
+            return LONG
+        
+    elif only_decreased:
+        if mvmt == RISING or last_diff > 0:
+            return LONG
     else:
         return None
 
@@ -129,7 +141,7 @@ def curr_movement(m, minute=2):
         diff.append(m[i+1] - m[i])
     d = np.sum(diff)
 
-    last_diff = (m[-1] - m[-2])/m[-2]
+    last_diff = (m[-1] - m[-2])/m[-2]*100
     if d > 0 and ( last_diff > 0):
         return RISING, last_diff
     elif d < 0 and (last_diff < 0):
