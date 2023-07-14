@@ -1,4 +1,4 @@
-import datetime
+
 import numpy as np
 import pandas as pd
 import mplfinance as mpf
@@ -6,15 +6,17 @@ import time
 import argparse
 import matplotlib.pyplot as plt
 import ccxt 
-from colorama import Fore, Style
+from colorama import Fore, Style, init
 from inspect_market import *
+from datetime import datetime
 
+init(convert=True)
 RISING = "Rising"
 FALLING = "Falling"
 LONG = "Long"
 SHORT = "Short"
 
-CALM = 3
+CALM = 0.05 # 20배일때 1%
 
 with open("symlist.txt", 'r') as f:
     SYMLIST = eval(f.read())
@@ -25,10 +27,11 @@ def cal_compound_amt(wallet_usdt, lev, price, symnum):
 
 
 def select_sym(binance, __buying_cond, __pre_cond, tf, limit, wins, symnum):
+    print("SEARCHING...")
     while 1:
         for sym in SYMLIST:  # 0705 0.55초 걸림
             buying_cond, pre_cond = __buying_cond, __pre_cond
-            actions = inspect_market(binance, sym, 1, buying_cond)
+            actions = inspect_market(binance, sym, 1, buying_cond, print_=False)
             short_only, long_only, buying_cond, _ = actions
         
             timing_pos = timing_to_position(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=False)
@@ -44,7 +47,7 @@ def select_sym(binance, __buying_cond, __pre_cond, tf, limit, wins, symnum):
                 for position in positions:
                     if position["symbol"] == sym.replace("/", ""):
                         amt = float(position['positionAmt'])
-                        if amt == 0 and sym.split("/")[0] not in ["BTC", "ETH", "BCH", "DASH", "XMR", "QNT"]:
+                        if amt == 0 and sym.split("/")[0] not in ["BTC", "ETH", "BCH", "DASH", "XMR", "QNT", "LTC"]:
                             print(f"\n!\n!\n{sym} OOOOO")
                             return sym
             else:
@@ -76,7 +79,8 @@ def timing_to_close(binance, sym, status, m4_shape,
                     m1, satisfying_price, max_loss, min_profit, cond1, howmuchtime):
     curr_pnl, profit = get_curr_pnl(binance, sym.replace("/", ""))
     suddenly = isitsudden(m1, status)
-    print(f"{sym} {howmuchtime} {status}] PRICE: {round(m1[-1], 2)} PNL: {profit} ({pnlstr(round(curr_pnl, 2))}), SAT_P: {satisfying_price}")
+    if howmuchtime % 300 == 0:
+        print(f"{sym} {howmuchtime} {status}] PNL: {profit} ({pnlstr(round(curr_pnl, 2))}), SAT_P: {satisfying_price}")
     mvmt, last_diff = curr_movement(m1, minute=4)
     # 이 이상 잃을 수는 없다
     loss_cond = curr_pnl < max_loss
@@ -95,7 +99,7 @@ def timing_to_close(binance, sym, status, m4_shape,
                     (m4_shape=='n' and mvmt==RISING and last_diff < CALM and status == LONG)))
     
     # 적당히 먹었다!
-    sat_cond = suddenly and curr_pnl > satisfying_price
+    sat_cond = not suddenly and curr_pnl > satisfying_price
 
     if loss_cond or sat_cond or ((zz_cond or shape_cond) and curr_pnl > min_profit):
         print(f"!!!{_y(sym)} {pnlstr(curr_pnl)} {loss_cond} {shape_cond} {sat_cond} {zz_cond}")
@@ -109,16 +113,26 @@ def timing_to_position(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=
     turnning_shape = m4_turn(m4)
     
     mvmt, last_diff = curr_movement(m1)
+    last_diff = np.abs(last_diff)
     # pre_cond = np.mean(val[1:])
     if pr:
         print(f'{sym} PRICE:', m1[-1], " SHAPE: ", turnning_shape, mvmt)
+    actions = inspect_market(binance, sym, 1, buying_cond, print_=False)
+    short_only, long_only, buying_cond, _ = actions
 
     # 오른게 더오르고 내린게 더내려간다
     # 그냥 약간 올랐을때로 변경
-    if turnning_shape == 'u' and mvmt == RISING and last_diff < CALM:
+    if mvmt == RISING and last_diff < CALM and not short_only:
         return LONG
-    elif turnning_shape == 'n' and mvmt == FALLING and last_diff < CALM:
+    elif mvmt == FALLING and last_diff < CALM and not long_only:
         return SHORT
+    
+    # 애네는 급등 급락시임 아 근데 if else로 하기엔 너무 복잡하다
+    # if mvmt == RISING and last_diff > CALM*10:
+
+    #     return SHORT
+    # elif mvmt == FALLING and last_diff > CALM*10:
+    #     return LONG
     else:
         return None
 
@@ -151,11 +165,12 @@ def isitsudden(m1, status, ref=0.085):
 
 
 def log_wallet_history(balance):
+    today = datetime.now()
     try:
         wallet_info = np.load('wallet_log.npy')
         wallet_info = np.concatenate(
                             [wallet_info, 
-                            [[time.time()], [float(balance['info']['totalWalletBalance'])]]],
+                            [[today.strftime('%y/%m/%d-%H:%M')], [float(balance['info']['totalWalletBalance'])]]],
                             axis=1
                             )  ## Date
     except FileNotFoundError:

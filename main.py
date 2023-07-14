@@ -23,12 +23,12 @@ class Trader():
         self.pre_cond = 0.0
         self.buying_cond = self.cond1
         self.order_num = 1                      # 거래 한번만
-        self.tf = '1m'
+        self.tf = '3m'
         self.lev = 20
         self.wins = [1, 11, 20, 20]
         self.limit = self.wins[-1]*10           # for past_data
         self.max_loss = max(-2*self.lev, -25)   # 마이너스인거 확인
-        self.min_profit = 0.15*self.lev          # 20 일때 3%
+        self.min_profit = 0.25*self.lev          # 20 일때 5%
         
         if not symbol:
             symbol = select_sym(self.binance, self.buying_cond, self.pre_cond, 
@@ -36,7 +36,7 @@ class Trader():
         self.sym = symbol
 
         # 갑자기 올랐을때/ 떨어졌을 때 satisfying_profit 넘으면 close
-        self.satisfying_profit = 0.5*self.lev   # 20 일때 8%
+        self.satisfying_profit = 0.8*self.lev   # 20 일때 16%
 
         self.time_interval = 2
         self.tf_ = int(self.tf[:-1])
@@ -151,16 +151,21 @@ class Trader():
             
                 self.status = timing_to_position(self.binance, self.sym, buying_cond=self.buying_cond, pre_cond=self.pre_cond, tf=self.tf, limit=self.limit, wins=self.wins)
 
-                if self.status == LONG:
-                    self.e_long()
-                elif self.status == SHORT:
-                    self.e_short()
+                try:
+                    if self.status == LONG:
+                        self.e_long()
+                    elif self.status == SHORT:
+                        self.e_short()
+                except Exception as error:
+                    print(error)
+                    self.status = None
+
                 if not self.status:
                     self.missed_timing += 1
 
             else :
                 # 시간이 오래 지날수록 욕심을 버리기
-                if (iter)%((3600/4)/self.time_interval) == 0 and iter > 0: # 3600 == 1h
+                if (iter)%((3600/2)/self.time_interval) == 0 and iter > 0: # 3600 == 1h
                     loss_count = np.sum(np.where(np.array(self.pre_pnls) < 0, 1, 0))
                     loss_ratio = loss_count/len(self.pre_pnls)  # 값이 크면 계속 잃었던 것
                     self.satisfying_profit *= 0.8
@@ -175,11 +180,14 @@ class Trader():
                 self.pre_pnls.append(curr_pnl)
                 
                 if close_position:
-                    if self.status == LONG:
-                        self.e_short(close=True)
-                    else:
-                        self.e_long(close=True)
-                    return 0  # finish the iteration
+                    try:
+                        if self.status == LONG:
+                            self.e_short(close=True)
+                        else:
+                            self.e_long(close=True)
+                        return 0  # finish the iteration
+                    except Exception as error:
+                        print(error)
                 
             time.sleep(self.time_interval)
             iter += 1

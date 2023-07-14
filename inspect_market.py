@@ -59,7 +59,7 @@ def bull_or_bear(binance, sym, mode=1):
 """
 
 cond_lv1, cond_lv2 = 0.05, -0.15
-stsfng_lv1, stsfng_lv2 = 6, 4  # 이만큼만 먹고 나오기
+stsfng_lv1, stsfng_lv2 = 7, 4  # 이만큼만 먹고 나오기
 
 # Return short_only, long_only, buying_cond, satisfying_pnl or False
 def a_l1():
@@ -83,11 +83,12 @@ def a_x2():
 
 
 
-def inspect_market(binance, sym, satisfying_pnl, buying_cond=0.4):
+def inspect_market(binance, sym, satisfying_pnl, buying_cond=0.4, print_=True):
     st1 = bull_or_bear(binance, sym=sym, mode=1)
     st2 = bull_or_bear(binance, sym=sym, mode=2)
     st3 = bull_or_bear(binance, sym=sym, mode=3)
-    print(f"**{sym}__[36h~ {st1}]_[12h~ {st2}]_[4h~ {st3}]")
+    if print_:
+        print(f"**{sym}__[36h~ {st1}]_[12h~ {st2}]_[4h~ {st3}]")
 
     if st1 == 'BEAR':           # 36시간동안 하락
         if st2 == "BEAR":           # 12시간동안 하락
@@ -110,7 +111,7 @@ def inspect_market(binance, sym, satisfying_pnl, buying_cond=0.4):
             elif st3 == "BULL":     # 36 하락 12 지그재그 4 상승
                 actions = a_l2()
             else:                   # 36 하락 12 지그재그 4 지그재그
-                actions = a_x1()
+                actions = a_s2()
 
     elif st1 == 'BULL':           # 36시간동안 상승
         if st2 == "BEAR":           # 12시간동안 하락
@@ -149,7 +150,7 @@ def inspect_market(binance, sym, satisfying_pnl, buying_cond=0.4):
             elif st3 == "BULL":         # 36~12 하락하다가 12시간전부터 오르기
                 actions = a_l1()
             else:                       # 36~12 12~4 4~
-                actions = a_x1()
+                actions = a_s2()
         else:
             if st3 == "BEAR":       # 36 지그재그 12 지그재그 4 하락
                 actions = a_s2()
