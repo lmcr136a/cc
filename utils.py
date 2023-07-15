@@ -58,11 +58,16 @@ def select_sym(binance, __buying_cond, __pre_cond, tf, limit, wins, symnum):
         # exit()
 
 def get_ms(binance, sym, tf, limit, wins):
-    df = past_data(binance, sym=sym, tf=tf, limit=limit)
-    m1 = df['close'].rolling(window=wins[0]).mean()
-    m2 =  df['close'].rolling(window=wins[1]).mean()
-    m3 = df['close'].rolling(window=wins[2]).mean()
-    m4 = df['close'].rolling(window=wins[3]).mean()
+    try:
+        df = past_data(binance, sym=sym, tf=tf, limit=limit)
+        m1 = df['close'].rolling(window=wins[0]).mean()
+        m2 =  df['close'].rolling(window=wins[1]).mean()
+        m3 = df['close'].rolling(window=wins[2]).mean()
+        m4 = df['close'].rolling(window=wins[3]).mean()
+    except Exception as e:
+        print(e)
+        m1, m2, m3, m4 = get_ms(binance, sym, tf, limit, wins)
+
     return m1, m2, m3, m4
 
 
