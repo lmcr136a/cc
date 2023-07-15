@@ -12,7 +12,7 @@ from utils import *
 TODO: 
 1. 15m 따라서 숏/롱 포지션 바꾸기
 2. 에러처리 try except를 while처리하기 
-3. wallet log 잘 찍히도록
+3. 점수를 socre화해서 188개중 "가장" 점수가 높은거 선택
 """
 
 class Trader():
@@ -184,7 +184,7 @@ class Trader():
                 # 현재 포지션 정리, 반대 포지션으로 바꿈
                 have2chg = False
                 if (iter)%((3600/4)/self.time_interval) == 0 and iter > 0: # 3600 == 1h, every 15min
-                    have2chg = isit_wrong_position(m2, self.status)
+                    have2chg = isit_wrong_position(m2, self.status, n=4)  # d(3분봉) 4개 => 18분
                 
                 if close_position:
                     try:
