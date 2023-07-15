@@ -26,7 +26,7 @@ class Trader():
         self.order_num = 1                      # 거래 한번만
         self.tf = '3m'
         self.lev = 20
-        self.wins = [1, 5, 15, 20]              # 3번째
+        self.wins = [1, 7, 15, 20]              # 3번째
         self.limit = self.wins[-1]*10           # for past_data
         self.max_loss = max(-2*self.lev, -25)   # 마이너스인거 확인
         self.min_profit = 0.25*self.lev          # 20 일때 5%
@@ -182,7 +182,8 @@ class Trader():
                 
                 # 포지션과 반대되는 방향으로 m3그래프가 변하면
                 # 현재 포지션 정리, 반대 포지션으로 바꿈
-                have2chg = isit_wrong_position(m3, self.status)
+                # if (iter)%((3600/4)/self.time_interval) == 0 and iter > 0: # 3600 == 1h, every 15min
+                have2chg = isit_wrong_position(m2, self.status)
                 
                 if close_position:
                     try:
@@ -201,11 +202,16 @@ class Trader():
                         try:
                             if self.status == LONG:
                                 self.e_short(close=True)
-                                self.status == SHORT
+                                self.e_short()
+                                self.status = SHORT
+                                print("Changed to SHORT")
                             else:
                                 self.e_long(close=True)
-                                self.status == LONG
+                                self.e_long()
+                                self.status = LONG
+                                print("Changed to LONG")
                             complete = True
+                            time.sleep(1)
                         except Exception as error:
                             print(error)
 

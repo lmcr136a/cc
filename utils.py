@@ -85,7 +85,7 @@ def timing_to_close(binance, sym, status, m4_shape,
     curr_pnl, profit = get_curr_pnl(binance, sym.replace("/", ""))
     suddenly = isitsudden(m1, status)
     if howmuchtime % 300 == 0:
-        print(f"{sym} {howmuchtime} {status}] PNL: {profit} ({pnlstr(round(curr_pnl, 2))}), SAT_P: {satisfying_price}")
+        print(f"{sym} {howmuchtime} {status_str(status)}] PNL: {profit} ({pnlstr(round(curr_pnl, 2))}), SAT_P: {satisfying_price}")
     mvmt, last_diff = curr_movement(m1, minute=4)
     # 이 이상 잃을 수는 없다
     loss_cond = curr_pnl < max_loss
@@ -121,12 +121,12 @@ def timing_to_position(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=
     last_diff = np.abs(last_diff)
     # pre_cond = np.mean(val[1:])
     if pr:
-        print(f'{sym} PRICE:', m1[-1], " SHAPE: ", turnning_shape, mvmt)
+        print(f'{sym} PRICE:', m1[-1], " SHAPE: ", turnning_shape, curr_mvmt)
     actions = inspect_market(binance, sym, 1, buying_cond, print_=False)
     short_only, long_only, buying_cond, _ = actions
 
     # [큰 흐름] m3 (15개 이동평균선) 이 상승일때 롱, 하락이면 숏
-    d_m3 = np.diff(m3)[-2:] # 두 번의 변화
+    d_m3 = np.diff(m3)[-3:] # 두 번의 변화
 
     # [작은 흐름] 순간의 급락: mvmt
     increasing_N_shortly_decreased = np.all(d_m3 > 0) and curr_mvmt == FALLING
@@ -176,7 +176,8 @@ def isitsudden(m1, status, ref=0.085):
 
 def isit_wrong_position(m3, status):
     # m3 은 상승(하락)하는데 SHORT(LONG) 포지션이다?!
-    d_m3 = np.diff(m3)[-2:]
+    d_m3 = np.diff(m3[-10:])[-3:]
+
     if (np.all(d_m3 > 0) and status == SHORT) or\
         (np.all(d_m3 < 0) and status == LONG):
         return True
@@ -301,6 +302,8 @@ def _y(str):
     return f"{Fore.YELLOW}{str}{Style.RESET_ALL}"
 def _c(str):
     return f"{Fore.CYAN}{str}{Style.RESET_ALL}"
+def _m(str):
+    return f"{Fore.MAGENTA}{str}{Style.RESET_ALL}"
 
 def pnlstr(pnlstr):
     if float(pnlstr) < 0:
@@ -309,3 +312,11 @@ def pnlstr(pnlstr):
         return _c(str(pnlstr)+"%")
     else:
         return str(pnlstr)+"%"
+    
+def status_str(status):
+    if status == LONG:
+        return _b(status)
+    elif status == SHORT:
+        return _m(status)
+    else:
+        return status
