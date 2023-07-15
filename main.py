@@ -10,8 +10,9 @@ from utils import *
 
 """
 TODO: 
-1. 왔다갔다하면 올랐을때 팔기
-2. 방금 올랐을때 숏사고 방금 떨어졌을때 롱사기
+1. 15m 따라서 숏/롱 포지션 바꾸기
+2. 에러처리 try except를 while처리하기 
+3. wallet log 잘 찍히도록
 """
 
 class Trader():
@@ -25,7 +26,7 @@ class Trader():
         self.order_num = 1                      # 거래 한번만
         self.tf = '3m'
         self.lev = 20
-        self.wins = [1, 11, 20, 20]
+        self.wins = [1, 5, 15, 20]              # 3번째
         self.limit = self.wins[-1]*10           # for past_data
         self.max_loss = max(-2*self.lev, -25)   # 마이너스인거 확인
         self.min_profit = 0.25*self.lev          # 20 일때 5%
@@ -36,7 +37,7 @@ class Trader():
         self.sym = symbol
 
         # 갑자기 올랐을때/ 떨어졌을 때 satisfying_profit 넘으면 close
-        self.satisfying_profit = 0.8*self.lev   # 20 일때 16%
+        self.satisfying_profit = 0.5*self.lev   # 20 일때 16%
 
         self.time_interval = 2
         self.tf_ = int(self.tf[:-1])
@@ -179,6 +180,10 @@ class Trader():
                         max_loss=self.max_loss, min_profit=self.min_profit, cond1=self.cond1, howmuchtime=iter)
                 self.pre_pnls.append(curr_pnl)
                 
+                # 포지션과 반대되는 방향으로 m3그래프가 변하면
+                # 현재 포지션 정리, 반대 포지션으로 바꿈
+                have2chg = isit_wrong_position(m3, self.status)
+                
                 if close_position:
                     try:
                         if self.status == LONG:
@@ -189,6 +194,22 @@ class Trader():
                     except Exception as error:
                         print(error)
                 
+                if have2chg:
+                    complete = False
+                    print(f"I think {self.status} position is wrong.. I'll change it to opposite pos.")
+                    while not complete:
+                        try:
+                            if self.status == LONG:
+                                self.e_short(close=True)
+                                self.status == SHORT
+                            else:
+                                self.e_long(close=True)
+                                self.status == LONG
+                            complete = True
+                        except Exception as error:
+                            print(error)
+
+
             time.sleep(self.time_interval)
             iter += 1
 

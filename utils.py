@@ -117,7 +117,7 @@ def timing_to_position(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=
     m1, m2, m3 , m4 = get_ms(binance, sym, tf, limit, wins)
     turnning_shape = m4_turn(m4)
     
-    mvmt, last_diff = curr_movement(m1)
+    curr_mvmt, last_diff = curr_movement(m1)  # 2개 시간봉의 움직임
     last_diff = np.abs(last_diff)
     # pre_cond = np.mean(val[1:])
     if pr:
@@ -125,11 +125,16 @@ def timing_to_position(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=
     actions = inspect_market(binance, sym, 1, buying_cond, print_=False)
     short_only, long_only, buying_cond, _ = actions
 
-    # 오른게 더오르고 내린게 더내려간다
-    # 그냥 약간 올랐을때로 변경
-    if mvmt == RISING and last_diff < CALM and not short_only:
+    # [큰 흐름] m3 (15개 이동평균선) 이 상승일때 롱, 하락이면 숏
+    d_m3 = np.diff(m3)[-2:] # 두 번의 변화
+
+    # [작은 흐름] 순간의 급락: mvmt
+    increasing_N_shortly_decreased = np.all(d_m3 > 0) and curr_mvmt == FALLING
+    decreasing_N_shortly_increased = np.all(d_m3 < 0) and curr_mvmt == RISING
+
+    if increasing_N_shortly_decreased and last_diff < CALM and not short_only:
         return LONG
-    elif mvmt == FALLING and last_diff < CALM and not long_only:
+    elif decreasing_N_shortly_increased and last_diff < CALM and not long_only:
         return SHORT
     
     # 애네는 급등 급락시임 아 근데 if else로 하기엔 너무 복잡하다
@@ -165,6 +170,15 @@ def isitsudden(m1, status, ref=0.085):
     if status == LONG and percent > ref:
         return True
     elif status == SHORT and percent < -ref:
+        return True
+    return False
+
+
+def isit_wrong_position(m3, status):
+    # m3 은 상승(하락)하는데 SHORT(LONG) 포지션이다?!
+    d_m3 = np.diff(m3)[-2:]
+    if (np.all(d_m3 > 0) and status == SHORT) or\
+        (np.all(d_m3 < 0) and status == LONG):
         return True
     return False
 
