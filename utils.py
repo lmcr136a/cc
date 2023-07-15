@@ -190,7 +190,7 @@ def log_wallet_history(balance):
         wallet_info = np.load('wallet_log.npy')
         wallet_info = np.concatenate(
                             [wallet_info, 
-                            [[today.strftime('%y/%m/%d-%H:%M')], [float(balance['info']['totalWalletBalance'])]]],
+                            [[time.time()], [float(balance['info']['totalWalletBalance'])]]],
                             axis=1
                             )  ## Date
     except FileNotFoundError:
