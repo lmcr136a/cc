@@ -174,9 +174,9 @@ def isitsudden(m1, status, ref=0.085):
     return False
 
 
-def isit_wrong_position(m3, status):
+def isit_wrong_position(m3, status, n=3):
     # m3 은 상승(하락)하는데 SHORT(LONG) 포지션이다?!
-    d_m3 = np.diff(m3[-10:])[-3:]
+    d_m3 = np.diff(m3[-10:])[-n:]
 
     if (np.all(d_m3 > 0) and status == SHORT) or\
         (np.all(d_m3 < 0) and status == LONG):
