@@ -183,8 +183,8 @@ class Trader():
                 # 포지션과 반대되는 방향으로 m3그래프가 변하면
                 # 현재 포지션 정리, 반대 포지션으로 바꿈
                 have2chg = False
-                if (iter)%((3600/4)/self.time_interval) == 0 and iter > 0: # 3600 == 1h, every 15min
-                    have2chg = isit_wrong_position(m2, self.status, n=4)  # d(3분봉) 4개 => 18분
+                # if (iter)%((3600/4)/self.time_interval) == 0 and iter > 0: # 3600 == 1h, every 15min
+                #     have2chg = isit_wrong_position(m2, self.status, n=4)  # d(3분봉) 4개 => 18분
                 
                 if close_position:
                     try:
