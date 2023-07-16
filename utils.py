@@ -71,6 +71,25 @@ def get_ms(binance, sym, tf, limit, wins):
     return m1, m2, m3, m4
 
 
+def whether_calm(sym:str):
+    binance = get_binance()
+    tf = "3m"
+    limit = 500
+    wins = [1,7,15,20]
+    m1, m2, m3, m4 = get_ms(binance, sym, tf, limit, wins)
+    n = 120
+    m = m1[-n:]
+    li = []
+    for i in range(n-1):
+        pre = m[-(i+1)]
+        now = m[-i]
+        li.append(np.abs(now-pre)/pre*100)
+    print(np.mean(li), np.max(li), np.std(li))
+    if something:
+        return True
+    elif something2:
+        return False
+    
 def get_curr_pnl(binance, sym):
     wallet = binance.fetch_balance(params={"type": "future"})
     positions = wallet['info']['positions']
