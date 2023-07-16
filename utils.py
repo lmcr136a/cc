@@ -71,13 +71,7 @@ def get_ms(binance, sym, tf, limit, wins):
     return m1, m2, m3, m4
 
 
-def whether_calm(sym:str):
-    binance = get_binance()
-    tf = "3m"
-    limit = 500
-    wins = [1,7,15,20]
-    m1, m2, m3, m4 = get_ms(binance, sym, tf, limit, wins)
-    n = 120
+def whether_calm(m1, ref=0.05, n=120):
     m = m1[-n:]
     li = []
     for i in range(n-1):
@@ -85,11 +79,10 @@ def whether_calm(sym:str):
         now = m[-i]
         li.append(np.abs(now-pre)/pre*100)
 
-    print(np.mean(li), np.max(li), np.std(li))
-
-    if np.std(li) < 0.05:
+    # print(np.mean(li), np.max(li), np.std(li))
+    if np.std(li) <= ref:
         return True
-    elif np.std(li) > 0.05:
+    elif np.std(li) > ref:
         return False
     
 def get_curr_pnl(binance, sym):
@@ -139,34 +132,38 @@ def timing_to_position_score(binance, sym, buying_cond, pre_cond, tf, limit, win
     # 1. satisfying pnl이 높은것
     # 2. 지금 상태가 너무 높거나 낮지 않은것 (중간일수록 좋은가..?)
     # 3. 
-    if whether_calm(sym):
-        m1, m2, m3 , m4 = get_ms(binance, sym, tf, limit, wins)
-        turnning_shape = m4_turn(m4)
-        
-        curr_mvmt, last_diff = curr_movement(m1)  # 2개 시간봉의 움직임
-        last_diff = np.abs(last_diff)
-        # pre_cond = np.mean(val[1:])
-        if pr:
-            print(f'{sym} PRICE:', m1[-1], " SHAPE: ", turnning_shape, curr_mvmt)
-        actions = inspect_market(binance, sym, 1, buying_cond, print_=False)
-        short_only, long_only, buying_cond, satisfying_pnl = actions
 
-        line_shape_market = True if not satisfying_pnl else False
+    m1, m2, m3 , m4 = get_ms(binance, sym, tf, limit, wins)
 
-        # [큰 흐름] m3 (15개 이동평균선) 이 상승일때 롱, 하락이면 숏
-        d_m3 = np.diff(m3)[-3:] # 두 번의 변화
+    if not whether_calm(m1):
+        return None
+    
+    turnning_shape = m4_turn(m4)
+    
+    curr_mvmt, last_diff = curr_movement(m1)  # 2개 시간봉의 움직임
+    last_diff = np.abs(last_diff)
+    # pre_cond = np.mean(val[1:])
+    if pr:
+        print(f'{sym} PRICE:', m1[-1], " SHAPE: ", turnning_shape, curr_mvmt)
+    actions = inspect_market(binance, sym, 1, buying_cond, print_=False)
+    short_only, long_only, buying_cond, satisfying_pnl = actions
 
-        # [작은 흐름] 순간의 급락: mvmt
-        increasing_N_shortly_decreased = np.all(d_m3 > 0) and curr_mvmt == FALLING
-        decreasing_N_shortly_increased = np.all(d_m3 < 0) and curr_mvmt == RISING
+    line_shape_market = True if not satisfying_pnl else False
 
-        if increasing_N_shortly_decreased and last_diff < CALM and not short_only:
-            return LONG
+    # [큰 흐름] m3 (15개 이동평균선) 이 상승일때 롱, 하락이면 숏
+    d_m3 = np.diff(m3)[-3:] # 두 번의 변화
 
-        elif decreasing_N_shortly_increased and last_diff < CALM and not long_only:
-            return SHORT
-        else:
-            return None
+    # [작은 흐름] 순간의 급락: mvmt
+    increasing_N_shortly_decreased = np.all(d_m3 > 0) and curr_mvmt == FALLING
+    decreasing_N_shortly_increased = np.all(d_m3 < 0) and curr_mvmt == RISING
+
+    if increasing_N_shortly_decreased and last_diff < CALM and not short_only:
+        return LONG
+
+    elif decreasing_N_shortly_increased and last_diff < CALM and not long_only:
+        return SHORT
+    else:
+        return None
     
 
 def timing_to_position(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=True):
