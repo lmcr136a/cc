@@ -146,6 +146,9 @@ class Trader():
         while 1: 
             m1, m2, m3, m4 = get_ms(self.binance, self.sym, self.tf, self.limit, self.wins)
             
+            # zigzag, zzdic = handle_zigzag(m1, hour=4, tf=float(self.tf[0]))
+            # print(zzdic['where_h'])
+            # print(zzdic['where_l']) 
             if self.missed_timing > 10:
                 return 0
             if not self.status:
@@ -160,6 +163,8 @@ class Trader():
                 except Exception as error:
                     print(error)
                     self.status = None
+                    if "Leverage" in str(error):
+                        self.lev = round(0.5*self.lev)
 
                 if not self.status:
                     self.missed_timing += 1
