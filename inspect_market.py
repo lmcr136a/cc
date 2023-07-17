@@ -8,12 +8,15 @@ import ccxt
 
 
 def past_data(binance, sym, tf, limit, since=None):
-    coininfo = binance.fetch_ohlcv(
-        symbol=sym, 
-        timeframe=tf, 
-        since=since, 
-        limit=limit
-    )
+    try:
+        coininfo = binance.fetch_ohlcv(symbol=sym, 
+            timeframe=tf, since=since, limit=limit)
+    except Exception as error:
+        print(error)
+        time.sleep(3)
+        coininfo = binance.fetch_ohlcv(symbol=sym, 
+            timeframe=tf, since=since, limit=limit)
+
     df = pd.DataFrame(coininfo, columns=['datetime', 'open', 'high', 'low', 'close', 'volume'])
     df['datetime'] = pd.to_datetime(df['datetime'], unit='ms')
     df.set_index('datetime', inplace=True)
