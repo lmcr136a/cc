@@ -28,8 +28,8 @@ class Trader():
         self.lev = 20
         self.wins = [1, 7, 15, 20]              # 3번째
         self.limit = self.wins[-1]*10           # for past_data
-        self.max_loss = max(-2*self.lev, -25)   # 마이너스인거 확인
-        self.min_profit = 0.25*self.lev          # 20 일때 5%
+        self.max_loss = max(-4.9*self.lev, -90)   # 마이너스인거 확인
+        self.min_profit = 0.2*self.lev          # 20 일때 4%  
         
         if not symbol:
             symbol = select_sym(self.binance, self.buying_cond, self.pre_cond, 
@@ -37,7 +37,7 @@ class Trader():
         self.sym = symbol
 
         # 갑자기 올랐을때/ 떨어졌을 때 satisfying_profit 넘으면 close
-        self.satisfying_profit = 0.5*self.lev   # 20 일때 16%
+        self.satisfying_profit = 0.5*self.lev   # 20 일때 10%
 
         self.time_interval = 2
         self.tf_ = int(self.tf[:-1])
@@ -153,7 +153,7 @@ class Trader():
                 return 0
             if not self.status:
             
-                self.status = timing_to_position(self.binance, self.sym, buying_cond=self.buying_cond, pre_cond=self.pre_cond, tf=self.tf, limit=self.limit, wins=self.wins)
+                self.status = timing_to_position_score(self.binance, self.sym, buying_cond=self.buying_cond, pre_cond=self.pre_cond, tf=self.tf, limit=self.limit, wins=self.wins)
 
                 try:
                     if self.status == LONG:

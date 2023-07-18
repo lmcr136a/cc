@@ -47,7 +47,7 @@ def select_sym(binance, __buying_cond, __pre_cond, tf, limit, wins, symnum):
                 for position in positions:
                     if position["symbol"] == sym.replace("/", ""):
                         amt = float(position['positionAmt'])
-                        if amt == 0 and sym.split("/")[0] not in ["BTC", "ETH", "BCH", "DASH", "XMR", "QNT", "LTC"]:
+                        if amt == 0 and sym.split("/")[0] not in ["ETC", "BNB", "BTC", "ETH", "BCH", "DASH", "XMR", "QNT", "LTC"]:
                             print(f"\n!\n!\n{sym} OOOOO")
                             return sym
             else:
@@ -160,21 +160,29 @@ def timing_to_position_score(binance, sym, buying_cond, pre_cond, tf, limit, win
     increasing_N_shortly_decreased = np.all(d_m3 > 0) and curr_mvmt == FALLING
     decreasing_N_shortly_increased = np.all(d_m3 < 0) and curr_mvmt == RISING
 
+    long_only = False
+    short_only = False
+
     if zzdic['where_h'][-1] > 0:
         short_only = True
     if zzdic['where_l'][-1] > 0:
         long_only = True
+    mm1 = minmax(m1)
 
-    print(np.all(d_m3 > 0),curr_mvmt == FALLING, last_diff < CALM, not short_only)
-    print(np.all(d_m3 < 0), curr_mvmt == RISING, last_diff < CALM, not long_only)
+    print(np.all(d_m3 > 0),curr_mvmt == FALLING, last_diff < CALM, not short_only, mm1[-1])
+    print(np.all(d_m3 < 0), curr_mvmt == RISING, last_diff < CALM, not long_only, buying_cond)
+
     if increasing_N_shortly_decreased and last_diff < CALM and not short_only:
         return LONG
 
     elif decreasing_N_shortly_increased and last_diff < CALM and not long_only:
         return SHORT
-    else:
-        return None
-    
+    print(mm1[-1] < -buying_cond, not short_only)
+    print(mm1[-1] > buying_cond, not long_only)
+    if mm1[-1] < -buying_cond and not short_only:
+        return LONG
+    elif mm1[-1] > buying_cond and not long_only:
+        return SHORT
 
 def timing_to_position(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=True):
     m1, m2, m3 , m4 = get_ms(binance, sym, tf, limit, wins)
@@ -182,6 +190,8 @@ def timing_to_position(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=
     
     curr_mvmt, last_diff = curr_movement(m1)  # 2개 시간봉의 움직임
     last_diff = np.abs(last_diff)
+    if last_diff > CALM:   # 위험
+        return None
     # pre_cond = np.mean(val[1:])
     if pr:
         print(f'{sym} PRICE:', m1[-1], " SHAPE: ", turnning_shape, curr_mvmt)
@@ -195,13 +205,19 @@ def timing_to_position(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=
     increasing_N_shortly_decreased = np.all(d_m3 > 0) and curr_mvmt == FALLING
     decreasing_N_shortly_increased = np.all(d_m3 < 0) and curr_mvmt == RISING
 
-    print(np.all(d_m3 > 0),curr_mvmt == FALLING, last_diff < CALM, not short_only)
-    print(np.all(d_m3 < 0), curr_mvmt == RISING, last_diff < CALM, not long_only)
-    if increasing_N_shortly_decreased and last_diff < CALM and not short_only:
+    mm1 = minmax(m1)
+    print(np.all(d_m3 > 0),curr_mvmt == FALLING, not short_only)
+    print(np.all(d_m3 < 0), curr_mvmt == RISING, not long_only)
+    if increasing_N_shortly_decreased and not short_only:
         return LONG
-    elif decreasing_N_shortly_increased and last_diff < CALM and not long_only:
+    elif decreasing_N_shortly_increased and not long_only:
         return SHORT
     
+    if mm1[-1] < -buying_cond and not short_only:
+        return LONG
+    elif mm1[-1] > buying_cond and not long_only:
+        return SHORT
+
     # 애네는 급등 급락시임 아 근데 if else로 하기엔 너무 복잡하다
     # if mvmt == RISING and last_diff > CALM*10:
 
