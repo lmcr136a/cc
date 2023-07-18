@@ -3,28 +3,24 @@ import numpy as np
 import pandas as pd
 import mplfinance as mpf
 import time
-import argparse
 import matplotlib.pyplot as plt
 import ccxt 
 from colorama import Fore, Style, init
-from inspect_market import *
+from bull_bear import *
 from datetime import datetime
+from HYPERPARAMETERS import *
 
 init(convert=True)
-RISING = "Rising"
-FALLING = "Falling"
-LONG = "Long"
-SHORT = "Short"
-
-CALM = 0.07 # 20배일때 1%
-
-with open("symlist.txt", 'r') as f:
-    SYMLIST = eval(f.read())
-print(len(SYMLIST))
 
 def cal_compound_amt(wallet_usdt, lev, price, symnum):
     return np.floor(wallet_usdt*lev/float(price)*0.9/float(symnum))
 
+"""
+죽 돌면서 봤는데 다 겁나 상승 or 하강만 하느라 지그재그가 없음 => 90%이상 [[00001111], [11110000]] 페어
+=> 지그재그더라도 내린게 더내리고 오른게 더오를 확률이 높음
+=> 상승장에서 m3가 u모양이면 롱사기, m3가 n모양이면 숏사기
+
+"""
 
 def select_sym(binance, __buying_cond, __pre_cond, tf, limit, wins, symnum):
     print("SEARCHING...")
@@ -42,11 +38,13 @@ def select_sym(binance, __buying_cond, __pre_cond, tf, limit, wins, symnum):
                 timing = True
 
             if timing:
+                print("Timing")
                 balance = binance.fetch_balance()
                 positions = balance['info']['positions']
                 for position in positions:
                     if position["symbol"] == sym.replace("/", ""):
                         amt = float(position['positionAmt'])
+                        print(amt)
                         if amt == 0 and sym.split("/")[0] not in ["ETC", "BNB", "BTC", "ETH", "BCH", "DASH", "XMR", "QNT", "LTC"]:
                             print(f"\n!\n!\n{sym} OOOOO")
                             return sym
@@ -135,7 +133,7 @@ def timing_to_position_score(binance, sym, buying_cond, pre_cond, tf, limit, win
     m1, m2, m3 , m4 = get_ms(binance, sym, tf, limit, wins)
     zigzag, zzdic = handle_zigzag(m1, hour=4, tf=float(tf[0]))
 
-    # print(sym, zigzag)
+    print(sym, zigzag)
     if not zigzag:
         return None
     print(sym, zzdic['where_h'])
@@ -179,9 +177,9 @@ def timing_to_position_score(binance, sym, buying_cond, pre_cond, tf, limit, win
         return SHORT
     print(mm1[-1] < -buying_cond, not short_only)
     print(mm1[-1] > buying_cond, not long_only)
-    if mm1[-1] < -buying_cond and not short_only:
+    if mm1[-1] < -buying_cond and not short_only and curr_mvmt == FALLING:
         return LONG
-    elif mm1[-1] > buying_cond and not long_only:
+    elif mm1[-1] > buying_cond and not long_only and curr_mvmt == RISING:
         return SHORT
 
 def timing_to_position(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=True):
@@ -320,8 +318,12 @@ def handle_zigzag(m1, hour=2, tf=1):
         l = [where_l[i], where_l[i+1]]
         if l == [0, 1] or l == [1, 0]:
             l_num += 0.5
-    # print(where_h, h_num)
-    # print(where_l, l_num)
+    ####
+    if len(where_h) < 10:
+        print(where_h, h_num)
+        print(where_l, l_num)
+    ####
+    
     l = round(len(where_h)/2)
     # print(np.sum(where_h[:l])*np.sum(where_l[:l])*np.sum(where_h[l:])*np.sum(where_l[l:]) )
     if h_num >= 1.5 and l_num >= 1.5 and (np.sum(where_h[:l])*np.sum(where_l[:l])*np.sum(where_h[l:])*np.sum(where_l[l:]) > 0):
