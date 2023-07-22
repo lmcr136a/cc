@@ -46,3 +46,16 @@ def start_to_fall(m1, m3, m4, ref=0.01):
         if m3[-1] < 0 and m4[-1] < 0:
             return {"position":LONG,
                     "force_pnl": SATISFYING_LV2}
+
+
+"""                          nununu\
+                           /         \
+        /nununu\         /            \
+     /nu        \un     / 
+    /               \unu
+  /
+/
+"""
+
+def camel_back():
+    pass

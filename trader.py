@@ -10,15 +10,15 @@ class Trader():
         self.binance = get_binance()
         self.symnum = float(symnum)
         self.other_running_sym_num = 0
-        self.cond1 = 0.4
+        self.cond1 = 0.2
         self.pre_cond = 0.0
         self.buying_cond = self.cond1
         self.order_num = 1                      # 거래 한번만
         self.tf = '3m'
         self.lev = 20
-        self.wins = [1, 7, 15, 20]              # 3번째
+        self.wins = [1, 8, 15, 70]              # 3번째
         self.limit = self.wins[-1]*10           # for past_data
-        self.max_loss = max(-4.9*self.lev, -90)   # 마이너스인거 확인
+        self.max_loss = -95                     # 마이너스인거 확인
         self.min_profit = 0.2*self.lev          # 20 일때 4%  
         
         if not symbol:
@@ -27,7 +27,7 @@ class Trader():
         self.sym = symbol
 
         # 갑자기 올랐을때/ 떨어졌을 때 satisfying_profit 넘으면 close
-        self.satisfying_profit = 0.5*self.lev   # 20 일때 10%
+        self.satisfying_profit = 0.75*self.lev   # 20 일때 15%
 
         self.time_interval = 2
         self.tf_ = int(self.tf[:-1])
@@ -63,7 +63,7 @@ class Trader():
         self.update_wallet(balance)
         for position in positions:
             amt = float(position['positionAmt'])
-            if amt > 0 and position["symbol"] != self.sym.replace("/", ""):
+            if abs(amt) > 0 and position["symbol"] != self.sym.replace("/", ""):
                 self.other_running_sym_num += 1
         self.symnum -= self.other_running_sym_num 
         print(f"other_running_sym_num: {self.other_running_sym_num}  self.symnum: {self.symnum}")
@@ -133,8 +133,9 @@ class Trader():
         self.anxious = 1
         self.pre_pnls = []
         self.missed_timing = 0
+        pnl_lastupdate = 0
         while 1:
-            importlib.reload(utils)
+            # importlib.reload(utils)
             m1, m2, m3, m4 = get_ms(self.binance, self.sym, self.tf, self.limit, self.wins)
             
             # zigzag, zzdic = handle_zigzag(m1, hour=4, tf=float(self.tf[0]))
@@ -147,11 +148,11 @@ class Trader():
                 self.status = timing_to_position_score(self.binance, self.sym, buying_cond=self.buying_cond, pre_cond=self.pre_cond, tf=self.tf, limit=self.limit, wins=self.wins)
 
                 try:
-                    print("롱 숏 바뀜")
+                    # print("롱 숏 바뀜")
                     if self.status == LONG:
-                        self.e_short()
-                    elif self.status == SHORT:
                         self.e_long()
+                    elif self.status == SHORT:
+                        self.e_short()
                 except Exception as error:
                     print(error)
                     self.status = None
@@ -176,7 +177,23 @@ class Trader():
                         m4_shape=m4_shape, m1=m1, satisfying_price=self.satisfying_profit, 
                         max_loss=self.max_loss, min_profit=self.min_profit, cond1=self.cond1, howmuchtime=iter)
                 self.pre_pnls.append(curr_pnl)
-                
+
+                if len(self.pre_pnls) > 50 and time.time() - pnl_lastupdate > 60 and (curr_pnl > self.pre_pnls[-30]) and curr_pnl > 0:
+                    earning_60s =  curr_pnl - self.pre_pnls[-30]
+                    if earning_60s > 3:
+                        self.satisfying_profit += 3
+                        print(f"curr_pnl: {pnlstr(curr_pnl)}    satisfying_pnl: {pnlstr(self.satisfying_profit)}")
+
+                    elif earning_60s > 6 and self.satisfying_profit < 50:
+                        self.satisfying_profit += earning_60s
+                        print(f"curr_pnl: {pnlstr(curr_pnl)}    satisfying_pnl: {pnlstr(self.satisfying_profit)}")
+                        
+                    elif earning_60s > 10:
+                        self.satisfying_profit += earning_60s
+                        print(f"curr_pnl: {pnlstr(curr_pnl)}    satisfying_pnl: {pnlstr(self.satisfying_profit)}")
+                    pnl_lastupdate = time.time()
+
+
                 # 포지션과 반대되는 방향으로 m3그래프가 변하면
                 # 현재 포지션 정리, 반대 포지션으로 바꿈
                 have2chg = False
@@ -193,25 +210,25 @@ class Trader():
                     except Exception as error:
                         print(error)
                 
-                if have2chg:
-                    complete = False
-                    print(f"I think {self.status} position is wrong.. I'll change it to opposite pos.")
-                    while not complete:
-                        try:
-                            if self.status == LONG:
-                                self.e_short(close=True)
-                                self.e_short()
-                                self.status = SHORT
-                                print("Changed to SHORT")
-                            else:
-                                self.e_long(close=True)
-                                self.e_long()
-                                self.status = LONG
-                                print("Changed to LONG")
-                            complete = True
-                            time.sleep(1)
-                        except Exception as error:
-                            print(error)
+                # if have2chg:
+                #     complete = False
+                #     print(f"I think {self.status} position is wrong.. I'll change it to opposite pos.")
+                #     while not complete:
+                #         try:
+                #             if self.status == LONG:
+                #                 self.e_short(close=True)
+                #                 self.e_short()
+                #                 self.status = SHORT
+                #                 print("Changed to SHORT")
+                #             else:
+                #                 self.e_long(close=True)
+                #                 self.e_long()
+                #                 self.status = LONG
+                #                 print("Changed to LONG")
+                #             complete = True
+                #             time.sleep(1)
+                #         except Exception as error:
+                #             print(error)
 
 
             time.sleep(self.time_interval)

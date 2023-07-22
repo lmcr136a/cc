@@ -33,18 +33,19 @@ def select_sym(binance, __buying_cond, __pre_cond, tf, limit, wins, symnum):
             timing_pos = timing_to_position_score(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=False)
             
             timing = False
-            if (timing_pos == SHORT and not long_only)\
-                or (timing_pos == LONG and not short_only):
+            # if (timing_pos == SHORT and not long_only)\
+            #     or (timing_pos == LONG and not short_only):
+            if timing_pos:
                 timing = True
 
             if timing:
-                print("Timing")
+                print(sym, "Timing")
+
                 balance = binance.fetch_balance()
                 positions = balance['info']['positions']
                 for position in positions:
                     if position["symbol"] == sym.replace("/", ""):
                         amt = float(position['positionAmt'])
-                        print(amt)
                         if amt == 0 and sym.split("/")[0] not in ["ETC", "BNB", "BTC", "ETH", "BCH", "DASH", "XMR", "QNT", "LTC"]:
                             print(f"\n!\n!\n{sym} OOOOO")
                             return sym
@@ -126,95 +127,101 @@ def timing_to_close(binance, sym, status, m4_shape,
 
 def timing_to_position_score(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=True):
     # 더 점수가 높다의 뜻?
-    # 1. satisfying pnl이 높은것
-    # 2. 지금 상태가 너무 높거나 낮지 않은것 (중간일수록 좋은가..?)
-    # 3. 
 
     m1, m2, m3 , m4 = get_ms(binance, sym, tf, limit, wins)
-    zigzag, zzdic = handle_zigzag(m1, hour=4, tf=float(tf[0]))
 
-    print(sym, zigzag)
-    if not zigzag:
-        return None
-    print(sym, zzdic['where_h'])
-    print(sym, zzdic['where_l']) 
+    curr_mvmt, curr_diff = curr_movement(m1, minute=5)  # 5개 시간봉의 움직임
+    big_shape = np.diff(m4)[-3:]
 
-    turnning_shape = m4_turn(m4)
-    
-    curr_mvmt, last_diff = curr_movement(m1)  # 2개 시간봉의 움직임
-    last_diff = np.abs(last_diff)
-    # pre_cond = np.mean(val[1:])
-    if pr:
-        print(f'{sym} PRICE:', m1[-1], " SHAPE: ", turnning_shape, curr_mvmt)
     actions = inspect_market(binance, sym, 1, buying_cond, print_=False)
     short_only, long_only, buying_cond, satisfying_pnl = actions
 
-    line_shape_market = True if not satisfying_pnl else False
+    mm1 = minmax(m1[-int(4*60/float(tf[0])):])   # 4시간동안
+    """
+    그래프의 위치, 장의 흐름, 지금 당장의 움직임, 큰 흐름(m4)
+    """
+    if mm1[-1] > buying_cond and not short_only and curr_mvmt == FALLING \
+        and np.all(big_shape > 0):
+        print(mm1[-1], buying_cond, not short_only , curr_mvmt == FALLING, np.all(big_shape > 0) , 
+            curr_diff < CALM*1.3, curr_diff, CALM)
+        if np.abs(curr_diff) < CALM*1.3:
+            return SHORT
+        else:
+            return LONG
+    elif mm1[-1] < -buying_cond and not long_only and curr_mvmt == RISING \
+        and np.all(big_shape < 0):
+        print(mm1[-1], -buying_cond, not long_only , curr_mvmt == RISING, np.all(big_shape < 0) , 
+            curr_diff < CALM*1.3, curr_diff, CALM)
+        if np.abs(curr_diff) < CALM*1.3:
+            return LONG
+        else:
+            return SHORT
 
-    # [큰 흐름] m3 (15개 이동평균선) 이 상승일때 롱, 하락이면 숏
-    d_m3 = np.diff(m2)[-3:] # 두 번의 변화
 
-    # [작은 흐름] 순간의 급락: mvmt
-    increasing_N_shortly_decreased = np.all(d_m3 > 0) and curr_mvmt == FALLING
-    decreasing_N_shortly_increased = np.all(d_m3 < 0) and curr_mvmt == RISING
-
-    long_only = False
-    short_only = False
-
-    if zzdic['where_h'][-1] > 0:
-        short_only = True
-    if zzdic['where_l'][-1] > 0:
-        long_only = True
-    mm1 = minmax(m1)
-
-    print(np.all(d_m3 > 0),curr_mvmt == FALLING, last_diff < CALM, not short_only, mm1[-1])
-    print(np.all(d_m3 < 0), curr_mvmt == RISING, last_diff < CALM, not long_only, buying_cond)
-
-    if increasing_N_shortly_decreased and last_diff < CALM and not short_only:
-        return LONG
-
-    elif decreasing_N_shortly_increased and last_diff < CALM and not long_only:
-        return SHORT
-    print(mm1[-1] < -buying_cond, not short_only)
-    print(mm1[-1] > buying_cond, not long_only)
-    if mm1[-1] < -buying_cond and not short_only and curr_mvmt == FALLING:
-        return LONG
-    elif mm1[-1] > buying_cond and not long_only and curr_mvmt == RISING:
-        return SHORT
-
-def timing_to_position(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=True):
-    m1, m2, m3 , m4 = get_ms(binance, sym, tf, limit, wins)
-    turnning_shape = m4_turn(m4)
-    
-    curr_mvmt, last_diff = curr_movement(m1)  # 2개 시간봉의 움직임
-    last_diff = np.abs(last_diff)
-    if last_diff > CALM:   # 위험
+    """
+    이 아래로는 지그재그일때만 해당
+    """
+    zigzag, zzdic = handle_zigzag(m1, hour=4, tf=float(tf[0]))
+    if not zigzag:
         return None
-    # pre_cond = np.mean(val[1:])
     if pr:
-        print(f'{sym} PRICE:', m1[-1], " SHAPE: ", turnning_shape, curr_mvmt)
-    actions = inspect_market(binance, sym, 1, buying_cond, print_=False)
-    short_only, long_only, buying_cond, _ = actions
-
+        print(sym, zzdic['where_h'])
+        print(sym, zzdic['where_l']) 
+    
+    curr_mvmt, curr_diff = curr_movement(m1, minute=3)
+    curr_diff = np.abs(curr_diff)
+    
     # [큰 흐름] m3 (15개 이동평균선) 이 상승일때 롱, 하락이면 숏
-    d_m3 = np.diff(m2)[-3:] # 두 번의 변화
+    d_m3 = np.diff(m3)[-3:] # 두 번의 변화
 
-    # [작은 흐름] 순간의 급락: mvmt
     increasing_N_shortly_decreased = np.all(d_m3 > 0) and curr_mvmt == FALLING
     decreasing_N_shortly_increased = np.all(d_m3 < 0) and curr_mvmt == RISING
-
-    mm1 = minmax(m1)
-    print(np.all(d_m3 > 0),curr_mvmt == FALLING, not short_only)
-    print(np.all(d_m3 < 0), curr_mvmt == RISING, not long_only)
-    if increasing_N_shortly_decreased and not short_only:
-        return LONG
-    elif decreasing_N_shortly_increased and not long_only:
-        return SHORT
     
-    if mm1[-1] < -buying_cond and not short_only:
-        return LONG
-    elif mm1[-1] > buying_cond and not long_only:
-        return SHORT
+    """
+    상승하다가 잠깐 하락? 하락하다가 잠깐 상승
+    """
+    if increasing_N_shortly_decreased or decreasing_N_shortly_increased:
+        if mm1[-1] < -buying_cond:
+            print(d_m3, curr_mvmt,  mm1[-1] , buying_cond)
+            return SHORT
+        elif mm1[-1] > buying_cond:
+            print(d_m3, curr_mvmt,  mm1[-1] , -buying_cond)
+            return LONG
+        
+
+# def timing_to_position(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=True):
+#     m1, m2, m3 , m4 = get_ms(binance, sym, tf, limit, wins)
+#     turnning_shape = m4_turn(m4)
+    
+#     curr_mvmt, last_diff = curr_movement(m1)  # 2개 시간봉의 움직임
+#     last_diff = np.abs(last_diff)
+#     if last_diff > CALM:   # 위험
+#         return None
+#     # pre_cond = np.mean(val[1:])
+#     if pr:
+#         print(f'{sym} PRICE:', m1[-1], " SHAPE: ", turnning_shape, curr_mvmt)
+#     actions = inspect_market(binance, sym, 1, buying_cond, print_=False)
+#     short_only, long_only, buying_cond, _ = actions
+
+#     # [큰 흐름] m3 (15개 이동평균선) 이 상승일때 롱, 하락이면 숏
+#     d_m3 = np.diff(m2)[-3:] # 두 번의 변화
+
+#     # [작은 흐름] 순간의 급락: mvmt
+#     increasing_N_shortly_decreased = np.all(d_m3 > 0) and curr_mvmt == FALLING
+#     decreasing_N_shortly_increased = np.all(d_m3 < 0) and curr_mvmt == RISING
+
+#     mm1 = minmax(m1)
+#     # print(np.all(d_m3 > 0),curr_mvmt == FALLING, not short_only)
+#     # print(np.all(d_m3 < 0), curr_mvmt == RISING, not long_only)
+#     if increasing_N_shortly_decreased and not short_only:
+#         return LONG
+#     elif decreasing_N_shortly_increased and not long_only:
+#         return SHORT
+    
+#     if mm1[-1] < -buying_cond and not short_only:
+#         return LONG
+#     elif mm1[-1] > buying_cond and not long_only:
+#         return SHORT
 
     # 애네는 급등 급락시임 아 근데 if else로 하기엔 너무 복잡하다
     # if mvmt == RISING and last_diff > CALM*10:
@@ -222,8 +229,8 @@ def timing_to_position(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=
     #     return SHORT
     # elif mvmt == FALLING and last_diff > CALM*10:
     #     return LONG
-    else:
-        return None
+    # else:
+    #     return None
 
 
 def curr_movement(m, minute=2):
@@ -233,13 +240,14 @@ def curr_movement(m, minute=2):
         diff.append(m[i+1] - m[i])
     d = np.sum(diff)
 
-    last_diff = (m[-1] - m[-2])/m[-2]
-    if d > 0 and ( last_diff > 0):
-        return RISING, last_diff
+    diff = (m[-1] - m[0])/m[-2]*100
+    last_diff = (m[-1] - m[0])/m[-2]
+    if d > 0 and (last_diff > 0):
+        return RISING, diff
     elif d < 0 and (last_diff < 0):
-        return FALLING, last_diff
+        return FALLING, diff
     else:
-        return "~", last_diff
+        return "~", diff
 
 
 def isitsudden(m1, status, ref=0.085):
@@ -318,11 +326,11 @@ def handle_zigzag(m1, hour=2, tf=1):
         l = [where_l[i], where_l[i+1]]
         if l == [0, 1] or l == [1, 0]:
             l_num += 0.5
-    ####
-    if len(where_h) < 10:
-        print(where_h, h_num)
-        print(where_l, l_num)
-    ####
+    # ####
+    # if len(where_h) < 10:
+    #     print(where_h, h_num)
+    #     print(where_l, l_num)
+    # ####
     
     l = round(len(where_h)/2)
     # print(np.sum(where_h[:l])*np.sum(where_l[:l])*np.sum(where_h[l:])*np.sum(where_l[l:]) )
