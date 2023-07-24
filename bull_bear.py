@@ -6,14 +6,19 @@ import time
 import matplotlib.pyplot as plt
 import ccxt 
 
+from HYPERPARAMETERS import *
+
 
 def past_data(binance, sym, tf, limit, since=None):
-    coininfo = binance.fetch_ohlcv(
-        symbol=sym, 
-        timeframe=tf, 
-        since=since, 
-        limit=limit
-    )
+    try:
+        coininfo = binance.fetch_ohlcv(symbol=sym, 
+            timeframe=tf, since=since, limit=limit)
+    except Exception as error:
+        print(error)
+        time.sleep(3)
+        coininfo = binance.fetch_ohlcv(symbol=sym, 
+            timeframe=tf, since=since, limit=limit)
+
     df = pd.DataFrame(coininfo, columns=['datetime', 'open', 'high', 'low', 'close', 'volume'])
     df['datetime'] = pd.to_datetime(df['datetime'], unit='ms')
     df.set_index('datetime', inplace=True)
@@ -62,37 +67,34 @@ def bull_or_bear(binance, sym, mode=1):
                 print("지그재그일거같음, 만족조금만")
                 print("딴거사기")
 """
-
-cond_lv1, cond_lv2 = 0.05, -0.15
-stsfng_lv1, stsfng_lv2 = 6, 3  # 이만큼만 먹고 나오기
-
 # Return short_only, long_only, buying_cond, satisfying_pnl or False
 def a_l1():
     # print("롱만가능, 기준조정")
-    return False, True, cond_lv2, False
+    return False, True, COND_LV2, False
 def a_l2():
     # print("모르겠는데 상승할거같음, 만족조금만")
-    return False, True, cond_lv1, stsfng_lv1
+    return False, True, COND_LV1, SATISFYING_LV1
 def a_s1():
     # print("숏만가능, 기준조정")
-    return True, False, cond_lv2, False
+    return True, False, COND_LV2, False
 def a_s2():
     # print("모르겠는데 하락할거같음, 만족조금만")
-    return True, False, cond_lv1, stsfng_lv1
+    return True, False, COND_LV1, SATISFYING_LV1
 def a_x1():
     # print("지그재그일거같음, 만족조금만")
-    return False, False, False, stsfng_lv2
+    return False, False, False, SATISFYING_LV2
 def a_x2():
     # print("딴거사기")
     return False, False, 100, False
 
 
 
-def inspect_market(binance, sym, satisfying_pnl, buying_cond=0.4):
+def inspect_market(binance, sym, satisfying_pnl, buying_cond=0.4, print_=True):
     st1 = bull_or_bear(binance, sym=sym, mode=1)
     st2 = bull_or_bear(binance, sym=sym, mode=2)
     st3 = bull_or_bear(binance, sym=sym, mode=3)
-    print(f"**{sym}__[36h~ {st1}]_[12h~ {st2}]_[4h~ {st3}]")
+    if print_:
+        print(f"**{sym}__[36h~ {st1}]_[12h~ {st2}]_[4h~ {st3}]")
 
     if st1 == 'BEAR':           # 36시간동안 하락
         if st2 == "BEAR":           # 12시간동안 하락
@@ -115,7 +117,7 @@ def inspect_market(binance, sym, satisfying_pnl, buying_cond=0.4):
             elif st3 == "BULL":     # 36 하락 12 지그재그 4 상승
                 actions = a_l2()
             else:                   # 36 하락 12 지그재그 4 지그재그
-                actions = a_x1()
+                actions = a_s2()
 
     elif st1 == 'BULL':           # 36시간동안 상승
         if st2 == "BEAR":           # 12시간동안 하락
@@ -154,7 +156,7 @@ def inspect_market(binance, sym, satisfying_pnl, buying_cond=0.4):
             elif st3 == "BULL":         # 36~12 하락하다가 12시간전부터 오르기
                 actions = a_l1()
             else:                       # 36~12 12~4 4~
-                actions = a_x1()
+                actions = a_s2()
         else:
             if st3 == "BEAR":       # 36 지그재그 12 지그재그 4 하락
                 actions = a_s2()
