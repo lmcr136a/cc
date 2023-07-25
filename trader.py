@@ -177,19 +177,24 @@ class Trader():
                 self.pre_pnls.append(curr_pnl)
 
                 if len(self.pre_pnls) > 50 and time.time() - pnl_lastupdate > 60 and (curr_pnl > self.pre_pnls[-30]) and curr_pnl > 0:
-                    earning_60s =  curr_pnl - self.pre_pnls[-30]
-                    if earning_60s > 3:
-                        self.satisfying_profit += 3
-                        print(f"curr_pnl: {pnlstr(curr_pnl)}    satisfying_pnl: {pnlstr(self.satisfying_profit)}")
+                    earning_60s =  curr_pnl - self.pre_pnls[-int(round(60/self.time_interval))]
 
-                    elif earning_60s > 6 and self.satisfying_profit < 50:
-                        self.satisfying_profit += earning_60s
-                        print(f"curr_pnl: {pnlstr(curr_pnl)}    satisfying_pnl: {pnlstr(self.satisfying_profit)}")
-                        
-                    elif earning_60s > 10:
-                        self.satisfying_profit += earning_60s
-                        print(f"curr_pnl: {pnlstr(curr_pnl)}    satisfying_pnl: {pnlstr(self.satisfying_profit)}")
-                    pnl_lastupdate = time.time()
+                    if time.time() - pnl_lastupdate < 60*30 and self.satisfying_profit - curr_pnl > 3:
+                        # 30분이내 전에 업데이트 했는데 아직 satisfying_pnl까지 3 이상 차이가 나면 걍 냅두기
+                        pass
+                    else:
+                        if earning_60s > 3:
+                            self.satisfying_profit += 3
+                            print(f"curr_pnl: {pnlstr(curr_pnl)}    satisfying_pnl: {pnlstr(self.satisfying_profit)}")
+
+                        elif earning_60s > 6 and self.satisfying_profit < 50:
+                            self.satisfying_profit += earning_60s
+                            print(f"curr_pnl: {pnlstr(curr_pnl)}    satisfying_pnl: {pnlstr(self.satisfying_profit)}")
+                            
+                        elif earning_60s > 10:
+                            self.satisfying_profit += earning_60s
+                            print(f"curr_pnl: {pnlstr(curr_pnl)}    satisfying_pnl: {pnlstr(self.satisfying_profit)}")
+                        pnl_lastupdate = time.time()
 
 
                 # 포지션과 반대되는 방향으로 m3그래프가 변하면
