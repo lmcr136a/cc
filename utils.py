@@ -3,51 +3,53 @@ import numpy as np
 import pandas as pd
 import mplfinance as mpf
 import time
-import argparse
+import random
 import matplotlib.pyplot as plt
 import ccxt 
 from colorama import Fore, Style, init
-from inspect_market import *
+from bull_bear import *
 from datetime import datetime
+from HYPERPARAMETERS import *
 
 init(convert=True)
-RISING = "Rising"
-FALLING = "Falling"
-LONG = "Long"
-SHORT = "Short"
-
-CALM = 0.07 # 20배일때 1%
-
-with open("symlist.txt", 'r') as f:
-    SYMLIST = eval(f.read())
-print(len(SYMLIST))
 
 def cal_compound_amt(wallet_usdt, lev, price, symnum):
     return np.floor(wallet_usdt*lev/float(price)*0.9/float(symnum))
 
+"""
+죽 돌면서 봤는데 다 겁나 상승 or 하강만 하느라 지그재그가 없음 => 90%이상 [[00001111], [11110000]] 페어
+=> 지그재그더라도 내린게 더내리고 오른게 더오를 확률이 높음
+=> 상승장에서 m3가 u모양이면 롱사기, m3가 n모양이면 숏사기
+
+"""
 
 def select_sym(binance, __buying_cond, __pre_cond, tf, limit, wins, symnum):
     print("SEARCHING...")
     while 1:
+        random.shuffle(SYMLIST)
         for sym in SYMLIST:  # 0705 0.55초 걸림
             buying_cond, pre_cond = __buying_cond, __pre_cond
             actions = inspect_market(binance, sym, 1, buying_cond, print_=False)
             short_only, long_only, buying_cond, _ = actions
-        
-            timing_pos = timing_to_position_score(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=False)
+            
+            ms = get_ms(binance, sym, tf, limit, wins)
+            timing_pos = timing_to_position_score(binance, ms, sym, buying_cond, pre_cond, tf, limit, wins, pr=False)
             
             timing = False
-            if (timing_pos == SHORT and not long_only)\
-                or (timing_pos == LONG and not short_only):
+            # if (timing_pos == SHORT and not long_only)\
+            #     or (timing_pos == LONG and not short_only):
+            if timing_pos:
                 timing = True
 
             if timing:
+                print(sym, "Timing")
+
                 balance = binance.fetch_balance()
                 positions = balance['info']['positions']
                 for position in positions:
                     if position["symbol"] == sym.replace("/", ""):
                         amt = float(position['positionAmt'])
-                        if amt == 0 and sym.split("/")[0] not in ["BTC", "ETH", "BCH", "DASH", "XMR", "QNT", "LTC"]:
+                        if amt == 0 and sym.split("/")[0] not in ["USDC", "ETC", "BNB", "BTC", "ETH", "BCH", "DASH", "XMR", "QNT", "LTC"]:
                             print(f"\n!\n!\n{sym} OOOOO")
                             return sym
             else:
@@ -94,14 +96,24 @@ def get_curr_pnl(binance, sym):
 
 
 def timing_to_close(binance, sym, status, m4_shape, 
-                    m1, satisfying_price, max_loss, min_profit, cond1, howmuchtime):
+                    ms, satisfying_price, max_loss, min_profit, buying_cond, howmuchtime, tf, limit, wins,):
+    m1 = ms[0]
     curr_pnl, profit = get_curr_pnl(binance, sym.replace("/", ""))
-    suddenly = isitsudden(m1, status)
-    if howmuchtime % 300 == 0 or (howmuchtime < 50 and howmuchtime % 10 ==0):
-        print(f"{sym} {howmuchtime} {status_str(status)}] PNL: {profit} ({pnlstr(round(curr_pnl, 2))}), SAT_P: {satisfying_price}")
-    mvmt, last_diff = curr_movement(m1, minute=4)
+    if howmuchtime % 300 == 0:
+        print("")
+    print(f"\r{sym} {howmuchtime} {status_str(status)}] PNL: {profit} ({pnlstr(round(curr_pnl, 1))}), SAT_P: {satisfying_price}\t", end="")
     # 이 이상 잃을 수는 없다
-    loss_cond = curr_pnl < max_loss
+    if curr_pnl < max_loss:
+        return True, curr_pnl
+    elif curr_pnl < min_profit:
+        return False, curr_pnl
+
+    timing_pos = timing_to_position_score(binance, ms, sym, buying_cond, 0, tf, limit, wins, pr=False)
+    if timing_pos:
+        return False, curr_pnl
+
+    suddenly = isitsudden(m1, status)
+    mvmt, last_diff = curr_movement(m1, minute=4)
 
     # 지그재그에서 위쪽이면 롱 팔고 아래면 숏 팔고
     zz_cond = False
@@ -119,97 +131,107 @@ def timing_to_close(binance, sym, status, m4_shape,
     # 적당히 먹었다!
     sat_cond = not suddenly and curr_pnl > satisfying_price
 
-    if loss_cond or sat_cond or ((zz_cond or shape_cond) and curr_pnl > min_profit):
-        print(f"!!!{_y(sym)} {pnlstr(curr_pnl)} {loss_cond} {shape_cond} {sat_cond} {zz_cond}")
+    if sat_cond or (zz_cond or shape_cond):
+        print(f"!!!{_y(sym)} {pnlstr(curr_pnl)} {shape_cond} {sat_cond} {zz_cond}")
         return True, curr_pnl
     else:
         return False, curr_pnl
 
 
-def timing_to_position_score(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=True):
+def timing_to_position_score(binance, ms, sym, buying_cond, pre_cond, tf, limit, wins, pr=True):
     # 더 점수가 높다의 뜻?
-    # 1. satisfying pnl이 높은것
-    # 2. 지금 상태가 너무 높거나 낮지 않은것 (중간일수록 좋은가..?)
-    # 3. 
 
-    m1, m2, m3 , m4 = get_ms(binance, sym, tf, limit, wins)
-    zigzag, zzdic = handle_zigzag(m1, hour=4, tf=float(tf[0]))
+    m1, m2, m3 , m4 = ms
 
-    # print(sym, zigzag)
-    if not zigzag:
-        return None
-    print(sym, zzdic['where_h'])
-    print(sym, zzdic['where_l']) 
+    curr_mvmt, curr_diff = curr_movement(m1, minute=5)  # 5개 시간봉의 움직임
+    big_shape = np.diff(m4)[-3:]
+    small_shape = shape_info(m2)
 
-    turnning_shape = m4_turn(m4)
-    
-    curr_mvmt, last_diff = curr_movement(m1)  # 2개 시간봉의 움직임
-    last_diff = np.abs(last_diff)
-    # pre_cond = np.mean(val[1:])
-    if pr:
-        print(f'{sym} PRICE:', m1[-1], " SHAPE: ", turnning_shape, curr_mvmt)
     actions = inspect_market(binance, sym, 1, buying_cond, print_=False)
     short_only, long_only, buying_cond, satisfying_pnl = actions
 
-    line_shape_market = True if not satisfying_pnl else False
+    mm1 = minmax(m1[-int(4*60/float(tf[0])):])   # 4시간동안
+    """
+    그래프의 위치, 장의 흐름, 지금 당장의 움직임, 큰 흐름(m4)
+    """
+    if mm1[-1] > buying_cond and not short_only and curr_mvmt == FALLING \
+        and np.all(big_shape > 0):
+        if pr:
+            print(f"[CASE1] cond: {mm1[-1]}>{buying_cond} {not short_only} , curr_mvmt:{curr_mvmt}")
+            print(f"{np.all(big_shape > 0)} {small_shape}")
+        if small_shape == INCREASING_CONCAVE:  
+            # 오목, 증가
+            return LONG
+        elif small_shape == DECREASING_CONVEX:
+            # 볼록, 감소
+            return SHORT
+        
+    elif mm1[-1] < -buying_cond and not long_only and curr_mvmt == RISING \
+        and np.all(big_shape < 0):
+        if pr:
+            print(f"[CASE2] cond: {mm1[-1]}<{-buying_cond} {not long_only} curr_mvmt: {curr_mvmt}")
+            print(f"{np.all(big_shape < 0)} {small_shape}")
+        if small_shape == INCREASING_CONCAVE:  
+            # 오목, 증가
+            return LONG
+        elif small_shape == DECREASING_CONVEX:
+            # 볼록, 감소
+            return SHORT
+        
 
-    # [큰 흐름] m3 (15개 이동평균선) 이 상승일때 롱, 하락이면 숏
-    d_m3 = np.diff(m2)[-3:] # 두 번의 변화
-
-    # [작은 흐름] 순간의 급락: mvmt
-    increasing_N_shortly_decreased = np.all(d_m3 > 0) and curr_mvmt == FALLING
-    decreasing_N_shortly_increased = np.all(d_m3 < 0) and curr_mvmt == RISING
-
-    if zzdic['where_h'][-1] > 0:
-        short_only = True
-    if zzdic['where_l'][-1] > 0:
-        long_only = True
-
-    print(np.all(d_m3 > 0),curr_mvmt == FALLING, last_diff < CALM, not short_only)
-    print(np.all(d_m3 < 0), curr_mvmt == RISING, last_diff < CALM, not long_only)
-    if increasing_N_shortly_decreased and last_diff < CALM and not short_only:
-        return LONG
-
-    elif decreasing_N_shortly_increased and last_diff < CALM and not long_only:
-        return SHORT
-    else:
+    """
+    이 아래로는 지그재그일때만 해당
+    """
+    zigzag, zzdic = handle_zigzag(m1, hour=4, tf=float(tf[0]))
+    if not zigzag:
         return None
-    
-
-def timing_to_position(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=True):
-    m1, m2, m3 , m4 = get_ms(binance, sym, tf, limit, wins)
-    turnning_shape = m4_turn(m4)
-    
-    curr_mvmt, last_diff = curr_movement(m1)  # 2개 시간봉의 움직임
-    last_diff = np.abs(last_diff)
-    # pre_cond = np.mean(val[1:])
     if pr:
-        print(f'{sym} PRICE:', m1[-1], " SHAPE: ", turnning_shape, curr_mvmt)
-    actions = inspect_market(binance, sym, 1, buying_cond, print_=False)
-    short_only, long_only, buying_cond, _ = actions
-
+        print(sym, zzdic['where_h'])
+        print(sym, zzdic['where_l']) 
+    
+    curr_mvmt, curr_diff = curr_movement(m1, minute=3)
+    curr_diff = np.abs(curr_diff)
+    
     # [큰 흐름] m3 (15개 이동평균선) 이 상승일때 롱, 하락이면 숏
-    d_m3 = np.diff(m2)[-3:] # 두 번의 변화
-
-    # [작은 흐름] 순간의 급락: mvmt
+    i = int(round(4*60/float(tf[0])))
+    d_m3 = np.diff(m3)[-3:] # 두 번의 변화
+    d_m4 = np.diff(m4[-i:]) # 4시간동안의 변화
+    m4inc = np.sum(np.where(d_m4 > 0, 1, 0))/len(d_m4) > 0.8
+    m4dec = np.sum(np.where(d_m4 < 0, 1, 0))/len(d_m4) > 0.8
+    
     increasing_N_shortly_decreased = np.all(d_m3 > 0) and curr_mvmt == FALLING
     decreasing_N_shortly_increased = np.all(d_m3 < 0) and curr_mvmt == RISING
-
-    print(np.all(d_m3 > 0),curr_mvmt == FALLING, last_diff < CALM, not short_only)
-    print(np.all(d_m3 < 0), curr_mvmt == RISING, last_diff < CALM, not long_only)
-    if increasing_N_shortly_decreased and last_diff < CALM and not short_only:
-        return LONG
-    elif decreasing_N_shortly_increased and last_diff < CALM and not long_only:
-        return SHORT
     
-    # 애네는 급등 급락시임 아 근데 if else로 하기엔 너무 복잡하다
-    # if mvmt == RISING and last_diff > CALM*10:
-
-    #     return SHORT
-    # elif mvmt == FALLING and last_diff > CALM*10:
-    #     return LONG
-    else:
-        return None
+    """
+    상승하다가 잠깐 하락? 하락하다가 잠깐 상승
+    """
+    if increasing_N_shortly_decreased or decreasing_N_shortly_increased:
+        if mm1[-1] < -buying_cond:
+            if pr:
+                print("[CASE3] ", d_m3, curr_mvmt,  mm1[-1], buying_cond, m4dec)
+            if m4dec:
+                return SHORT
+            else:
+                return LONG
+        elif mm1[-1] > buying_cond:
+            if pr:
+                print("[CASE4] ", d_m3, curr_mvmt,  mm1[-1] , -buying_cond, m4inc)
+            if m4inc:
+                return LONG
+            else:
+                return SHORT
+        
+def shape_info(m, n=4):
+    # return 오목/볼록, 증가/감소
+    m = m[-n:]
+    d_m = np.diff(m)
+    dd_m = np.diff(d_m)
+    if np.all(d_m < 0):         # 감소
+        if np.all(dd_m < 0):    # 볼록
+            return DECREASING_CONVEX
+    elif np.all(d_m > 0):
+        if np.all(dd_m > 0):
+            return INCREASING_CONCAVE
 
 
 def curr_movement(m, minute=2):
@@ -219,13 +241,14 @@ def curr_movement(m, minute=2):
         diff.append(m[i+1] - m[i])
     d = np.sum(diff)
 
-    last_diff = (m[-1] - m[-2])/m[-2]
-    if d > 0 and ( last_diff > 0):
-        return RISING, last_diff
+    diff = (m[-1] - m[0])/m[-2]*100
+    last_diff = (m[-1] - m[0])/m[-2]
+    if d > 0 and (last_diff > 0):
+        return RISING, diff
     elif d < 0 and (last_diff < 0):
-        return FALLING, last_diff
+        return FALLING, diff
     else:
-        return "~", last_diff
+        return "~", diff
 
 
 def isitsudden(m1, status, ref=0.085):
@@ -256,14 +279,17 @@ def log_wallet_history(balance):
         wallet_info = np.load('wallet_log.npy')
         wallet_info = np.concatenate(
                             [wallet_info, 
-                            [[time.time()], [float(balance['info']['totalWalletBalance'])]]],
+                            [[time.time()], 
+                            [float(balance['info']['totalWalletBalance'])],
+                            [float(balance['info']['totalMarginBalance'])] ]],
                             axis=1
                             )  ## Date
     except FileNotFoundError:
-        wallet_info = np.array([[time.time()], [float(balance['info']['totalWalletBalance'])]])
+        wallet_info = np.array([[time.time()], [float(balance['info']['totalWalletBalance'])], [float(balance['info']['totalMarginBalance'])]])
     np.save('wallet_log.npy', wallet_info)
     plt.figure()
-    plt.plot(wallet_info[0], wallet_info[1])
+    plt.plot(wallet_info[0], wallet_info[1], 'k-')
+    plt.plot(wallet_info[0], wallet_info[2], 'b--')
     plt.savefig("wallet_log.png")
     plt.close()
 
@@ -304,8 +330,12 @@ def handle_zigzag(m1, hour=2, tf=1):
         l = [where_l[i], where_l[i+1]]
         if l == [0, 1] or l == [1, 0]:
             l_num += 0.5
-    # print(where_h, h_num)
-    # print(where_l, l_num)
+    # ####
+    # if len(where_h) < 10:
+    #     print(where_h, h_num)
+    #     print(where_l, l_num)
+    # ####
+    
     l = round(len(where_h)/2)
     # print(np.sum(where_h[:l])*np.sum(where_l[:l])*np.sum(where_h[l:])*np.sum(where_l[l:]) )
     if h_num >= 1.5 and l_num >= 1.5 and (np.sum(where_h[:l])*np.sum(where_l[:l])*np.sum(where_h[l:])*np.sum(where_l[l:]) > 0):
