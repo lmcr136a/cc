@@ -97,6 +97,12 @@ def timing_to_close(binance, sym, status, m4_shape,
                     ms, satisfying_price, max_loss, min_profit, buying_cond, howmuchtime, tf, limit, wins,):
     m1 = ms[0]
     curr_pnl, profit = get_curr_pnl(binance, sym.replace("/", ""))
+    # 이 이상 잃을 수는 없다
+    if curr_pnl < max_loss:
+        return True, curr_pnl
+    elif curr_pnl < min_profit:
+        return False, curr_pnl
+
     
     timing_pos = timing_to_position_score(binance, ms, sym, buying_cond, 0, tf, limit, wins, pr=False)
     if timing_pos:
@@ -106,8 +112,6 @@ def timing_to_close(binance, sym, status, m4_shape,
     if howmuchtime % 300 == 0 or (howmuchtime < 50 and howmuchtime % 10 ==0):
         print(f"{sym} {howmuchtime} {status_str(status)}] PNL: {profit} ({pnlstr(round(curr_pnl, 2))}), SAT_P: {satisfying_price}")
     mvmt, last_diff = curr_movement(m1, minute=4)
-    # 이 이상 잃을 수는 없다
-    loss_cond = curr_pnl < max_loss
 
     # 지그재그에서 위쪽이면 롱 팔고 아래면 숏 팔고
     zz_cond = False
@@ -125,8 +129,8 @@ def timing_to_close(binance, sym, status, m4_shape,
     # 적당히 먹었다!
     sat_cond = not suddenly and curr_pnl > satisfying_price
 
-    if loss_cond or sat_cond or ((zz_cond or shape_cond) and curr_pnl > min_profit):
-        print(f"!!!{_y(sym)} {pnlstr(curr_pnl)} {loss_cond} {shape_cond} {sat_cond} {zz_cond}")
+    if sat_cond or (zz_cond or shape_cond):
+        print(f"!!!{_y(sym)} {pnlstr(curr_pnl)} {shape_cond} {sat_cond} {zz_cond}")
         return True, curr_pnl
     else:
         return False, curr_pnl
@@ -149,8 +153,9 @@ def timing_to_position_score(binance, ms, sym, buying_cond, pre_cond, tf, limit,
     """
     if mm1[-1] > buying_cond and not short_only and curr_mvmt == FALLING \
         and np.all(big_shape > 0):
-        print(mm1[-1], buying_cond, not short_only , curr_mvmt == FALLING, np.all(big_shape > 0) , 
-            np.abs(curr_diff) < CALM*1.3, curr_diff, CALM)
+        if pr:
+            print(mm1[-1], buying_cond, not short_only , curr_mvmt == FALLING, np.all(big_shape > 0) , 
+                np.abs(curr_diff) < CALM*1.3, curr_diff, CALM)
         if np.abs(curr_diff) < CALM*1.3:
             return SHORT
         else:
@@ -190,10 +195,12 @@ def timing_to_position_score(binance, ms, sym, buying_cond, pre_cond, tf, limit,
     """
     if increasing_N_shortly_decreased or decreasing_N_shortly_increased:
         if mm1[-1] < -buying_cond:
-            print(d_m3, curr_mvmt,  mm1[-1] , buying_cond)
+            if pr:
+                print(d_m3, curr_mvmt,  mm1[-1] , buying_cond)
             return SHORT
         elif mm1[-1] > buying_cond:
-            print(d_m3, curr_mvmt,  mm1[-1] , -buying_cond)
+            if pr:
+                print(d_m3, curr_mvmt,  mm1[-1] , -buying_cond)
             return LONG
         
 
