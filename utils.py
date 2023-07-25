@@ -29,8 +29,9 @@ def select_sym(binance, __buying_cond, __pre_cond, tf, limit, wins, symnum):
             buying_cond, pre_cond = __buying_cond, __pre_cond
             actions = inspect_market(binance, sym, 1, buying_cond, print_=False)
             short_only, long_only, buying_cond, _ = actions
-        
-            timing_pos = timing_to_position_score(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=False)
+            
+            ms = get_ms(binance, sym, tf, limit, wins)
+            timing_pos = timing_to_position_score(binance, ms, sym, buying_cond, pre_cond, tf, limit, wins, pr=False)
             
             timing = False
             # if (timing_pos == SHORT and not long_only)\
@@ -93,8 +94,14 @@ def get_curr_pnl(binance, sym):
 
 
 def timing_to_close(binance, sym, status, m4_shape, 
-                    m1, satisfying_price, max_loss, min_profit, cond1, howmuchtime):
+                    ms, satisfying_price, max_loss, min_profit, buying_cond, howmuchtime, tf, limit, wins,):
+    m1 = ms[0]
     curr_pnl, profit = get_curr_pnl(binance, sym.replace("/", ""))
+    
+    timing_pos = timing_to_position_score(binance, ms, sym, buying_cond, 0, tf, limit, wins, pr=False)
+    if timing_pos:
+        return False, curr_pnl
+
     suddenly = isitsudden(m1, status)
     if howmuchtime % 300 == 0 or (howmuchtime < 50 and howmuchtime % 10 ==0):
         print(f"{sym} {howmuchtime} {status_str(status)}] PNL: {profit} ({pnlstr(round(curr_pnl, 2))}), SAT_P: {satisfying_price}")
@@ -125,10 +132,10 @@ def timing_to_close(binance, sym, status, m4_shape,
         return False, curr_pnl
 
 
-def timing_to_position_score(binance, sym, buying_cond, pre_cond, tf, limit, wins, pr=True):
+def timing_to_position_score(binance, ms, sym, buying_cond, pre_cond, tf, limit, wins, pr=True):
     # 더 점수가 높다의 뜻?
 
-    m1, m2, m3 , m4 = get_ms(binance, sym, tf, limit, wins)
+    m1, m2, m3 , m4 = ms
 
     curr_mvmt, curr_diff = curr_movement(m1, minute=5)  # 5개 시간봉의 움직임
     big_shape = np.diff(m4)[-3:]
@@ -143,15 +150,16 @@ def timing_to_position_score(binance, sym, buying_cond, pre_cond, tf, limit, win
     if mm1[-1] > buying_cond and not short_only and curr_mvmt == FALLING \
         and np.all(big_shape > 0):
         print(mm1[-1], buying_cond, not short_only , curr_mvmt == FALLING, np.all(big_shape > 0) , 
-            curr_diff < CALM*1.3, curr_diff, CALM)
+            np.abs(curr_diff) < CALM*1.3, curr_diff, CALM)
         if np.abs(curr_diff) < CALM*1.3:
             return SHORT
         else:
             return LONG
     elif mm1[-1] < -buying_cond and not long_only and curr_mvmt == RISING \
         and np.all(big_shape < 0):
-        print(mm1[-1], -buying_cond, not long_only , curr_mvmt == RISING, np.all(big_shape < 0) , 
-            curr_diff < CALM*1.3, curr_diff, CALM)
+        if pr:
+            print(mm1[-1], -buying_cond, not long_only , curr_mvmt == RISING, np.all(big_shape < 0) , 
+                np.abs(curr_diff) < CALM*1.3, curr_diff, CALM)
         if np.abs(curr_diff) < CALM*1.3:
             return LONG
         else:
@@ -278,14 +286,17 @@ def log_wallet_history(balance):
         wallet_info = np.load('wallet_log.npy')
         wallet_info = np.concatenate(
                             [wallet_info, 
-                            [[time.time()], [float(balance['info']['totalWalletBalance'])]]],
+                            [[time.time()], 
+                            [float(balance['info']['totalWalletBalance'])],
+                            [float(balance['info']['totalMarginBalance'])] ]],
                             axis=1
                             )  ## Date
     except FileNotFoundError:
-        wallet_info = np.array([[time.time()], [float(balance['info']['totalWalletBalance'])]])
+        wallet_info = np.array([[time.time()], [float(balance['info']['totalWalletBalance'])], [float(balance['info']['totalMarginBalance'])]])
     np.save('wallet_log.npy', wallet_info)
     plt.figure()
-    plt.plot(wallet_info[0], wallet_info[1])
+    plt.plot(wallet_info[0], wallet_info[1], 'k-')
+    plt.plot(wallet_info[0], wallet_info[2], 'b--')
     plt.savefig("wallet_log.png")
     plt.close()
 

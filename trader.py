@@ -29,7 +29,7 @@ class Trader():
         # 갑자기 올랐을때/ 떨어졌을 때 satisfying_profit 넘으면 close
         self.satisfying_profit = 0.75*self.lev   # 20 일때 15%
 
-        self.time_interval = 2
+        self.time_interval = 3
         self.tf_ = int(self.tf[:-1])
         self.set_lev = True                     # 기존거 가져오는경우 다시 set하면 에러나기때문
         self.binance.load_markets()
@@ -136,16 +136,13 @@ class Trader():
         pnl_lastupdate = 0
         while 1:
             # importlib.reload(utils)
-            m1, m2, m3, m4 = get_ms(self.binance, self.sym, self.tf, self.limit, self.wins)
+            ms = get_ms(self.binance, self.sym, self.tf, self.limit, self.wins)
             
-            # zigzag, zzdic = handle_zigzag(m1, hour=4, tf=float(self.tf[0]))
-            # print(zzdic['where_h'])
-            # print(zzdic['where_l']) 
             if self.missed_timing > 10:
                 return 0
             if not self.status:
             
-                self.status = timing_to_position_score(self.binance, self.sym, buying_cond=self.buying_cond, pre_cond=self.pre_cond, tf=self.tf, limit=self.limit, wins=self.wins)
+                self.status = timing_to_position_score(self.binance, ms, self.sym, buying_cond=self.buying_cond, pre_cond=self.pre_cond, tf=self.tf, limit=self.limit, wins=self.wins)
 
                 try:
                     # print("롱 숏 바뀜")
@@ -170,12 +167,13 @@ class Trader():
                     self.satisfying_profit *= 0.8
                     self.satisfying_profit = round(max(self.satisfying_profit, self.min_profit), 2)
 
-                m4_shape = m4_turn(m4)
+                m4_shape = m4_turn(ms[3])
                 
                 # curr pnl을 return하는건 그냥임
                 close_position, curr_pnl = timing_to_close(binance=self.binance, sym=self.sym, status=self.status, 
-                        m4_shape=m4_shape, m1=m1, satisfying_price=self.satisfying_profit, 
-                        max_loss=self.max_loss, min_profit=self.min_profit, cond1=self.cond1, howmuchtime=iter)
+                        m4_shape=m4_shape, ms=ms, satisfying_price=self.satisfying_profit, 
+                        max_loss=self.max_loss, min_profit=self.min_profit, buying_cond=self.buying_cond, howmuchtime=iter,
+                        tf=self.tf, limit=self.limit, wins=self.wins)
                 self.pre_pnls.append(curr_pnl)
 
                 if len(self.pre_pnls) > 50 and time.time() - pnl_lastupdate > 60 and (curr_pnl > self.pre_pnls[-30]) and curr_pnl > 0:
