@@ -1,2 +1,7 @@
 token.txt
 __pycache__/*.pyc
+deep/__pycache__/*.pyc
+deep/test_dataset.mat
+deep/total_dataset.mat
+deep/total_dataset_0725.mat
+deep/train_dataset.mat
