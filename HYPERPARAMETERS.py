@@ -2,6 +2,9 @@ RISING = "Rising"
 FALLING = "Falling"
 LONG = "Long"
 SHORT = "Short"
+DECREASING_CONVEX = 'Decreasing and Convex'
+INCREASING_CONCAVE = 'Increasing and Concave'
+
 
 CALM = 0.07 # 20배일때 1%
 
