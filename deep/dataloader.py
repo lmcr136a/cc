@@ -54,7 +54,7 @@ def minmax(m, index):
     # print(m.shape, np.min(m), np.max(m))
     m = (m - np.min(m))/(np.max(m) - np.min(m))
     # 원래 0~1 사이인데, 그냥 -1~1로 하고싶음
-    m = 2*(m-0.5)
+    # m = 2*(m-0.5)
     return m
 
 def get_dataloader(batch_size, train=False):

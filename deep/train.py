@@ -7,7 +7,7 @@ from torch.nn import functional as F
 
 
 ##########################
-pretrained_path = './best_model.pt'
+pretrained_path = None#'./best_model.pt'
 device = torch.device('cuda:0')
 num_classes = 3
 learning_rate = 0.005
@@ -16,9 +16,9 @@ ref = 0.7
 
 
 if pretrained_path:
-    net = torch.open(pretrained_path)
+    net = torch.load(pretrained_path)
 else:
-    net = models.resnet18(pretrained=False)
+    net = models.resnet18(pretrained=True)
     num_ftrs = net.fc.in_features
     net.fc = nn.Linear(num_ftrs, num_classes)
     print(net.conv1)
@@ -48,10 +48,15 @@ def train_loop(dataloader, model, loss_fn, optimizer, epoch):
         X, y = torch.tensor(X, device=device, dtype=net.conv1.weight.dtype), torch.tensor(y, device=device, dtype=torch.int64)
         # if epoch == 0:
         #     y *= 10
-        pred = model(X).squeeze()
-
+        # print(X.shape)
+        # exit()
+        pred = model(X)#.squeeze()
+        # print(y.shape)
+        # print(pred.shape)
+        # print(pred)
         loss = loss_fn(pred, y)
-
+        # print(loss)
+        # exit()
         # 역전파
         optimizer.zero_grad()
         loss.backward()
@@ -86,6 +91,7 @@ def test_loop(dataloader, model, loss_fn):
 
 epochs = 10000
 best_loss = 0
+test_loop(test_loader, net, loss_fn)
 for t in range(epochs):
     print(f"Epoch {t+1}\n-------------------------------")
     print("lr: ", optimizer.param_groups[0]['lr'])

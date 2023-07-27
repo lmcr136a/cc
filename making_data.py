@@ -13,9 +13,9 @@ from utils import *
 
 test_num = 50000
 
-filename_total =  "deep/total_dataset.mat"
-filename_train =  "deep/train_dataset.mat"
-filename_test =  "deep/test_dataset.mat"
+filename_total =  "./deep/total_dataset.mat"
+filename_train =  "./deep/train_dataset.mat"
+filename_test =  "./deep/test_dataset.mat"
 dataset = io.loadmat(filename_total)
 
 binance = get_binance()
@@ -26,16 +26,19 @@ ref = 0.55
 data = pd.DataFrame(columns = ['inputs', 'label'])
 
 # dataset = {'inputs': [], 'labels': []} #################################################3
-labelinfo = {"0":0, "1":0, "2":0}       # 0: 아무것도아님 1:상승 2:하락
+arrinput = dataset['inputs']
+dataset['inputs'], dataset['labels'] = dataset['inputs'].tolist(), dataset['labels'].tolist()
+
+labelinfo = np.array([0, 0, 0])      # 0: 아무것도아님 1:상승 2:하락
+
+for d in dataset['labels'][0]:
+    labelinfo[d] += 1
+print(labelinfo)
 for sym in SYMLIST:
     df3 = past_data(binance, sym=sym, tf='3m', limit=1500)['close']
     df15 = past_data(binance, sym=sym, tf='15m', limit=1500)['close']
     for idx in range(1, len(df3)-n-label_n):
-        input_3 = df3[-(idx+n+label_n):-(idx+label_n)]
-        idx15 = (idx+label_n)//5+1
-        input_15 = df15[-(idx15+n):-idx15-1]
-        input_15 = pd.concat([input_15, input_3[-1:]])
-
+        # label
         label_vec = df3[-(idx+label_n):-idx]
         future_low, future_high, past = min(label_vec), max(label_vec), label_vec[0]
         diff_ratio_l = (future_low - past)/past*100
@@ -43,34 +46,60 @@ for sym in SYMLIST:
 
         if abs(diff_ratio_l) > abs(diff_ratio_h) and diff_ratio_l < -ref:
             label = 2
-            labelinfo['2'] += 1
+            if labelinfo[2] > labelinfo[1]*1.02:
+                continue
+            labelinfo[2] += 1
         elif abs(diff_ratio_l) < abs(diff_ratio_h) and diff_ratio_h > ref:
             label = 1
-            labelinfo['1'] += 1
+            if labelinfo[1] > labelinfo[2]*1.02:
+                continue
+            labelinfo[1] += 1
         else:
             label = 0
-            if labelinfo['0'] > labelinfo['1'] or labelinfo['0'] > labelinfo['2']:
+            if labelinfo[0] > labelinfo[1] or labelinfo[0] > labelinfo[2]:
                 continue
-            labelinfo['0'] += 1
-
+            labelinfo[0] += 1
+            
+        # input
+        input_3 = df3[-(idx+n+label_n):-(idx+label_n)]
+        idx15 = (idx+label_n)//5+1
+        input_15 = df15[-(idx15+n):-idx15-1]
+        input_15 = pd.concat([input_15, input_3[-1:]])
         input_ = np.concatenate([np.expand_dims(input_3, 0), np.expand_dims(input_15, 0)], axis=0)
-        dataset['inputs'].append(input_.tolist())
-        dataset['labels'].append(label)
+        
+        check = np.where(arrinput==input_, 1, 0)
+        check = np.sum(check, axis=(1,2))
+        check_num = input_.shape[0]*input_.shape[1]
+        check = np.sum(np.where(check == check_num, 1, 0))
+        if check == 0:
+            # print(idx)
+
+            dataset['inputs'].append(input_.tolist())
+            dataset['labels'][0].append(label)
     print(labelinfo)
+    # break
+dataset['labelinfo'] = labelinfo
 dataset['inputs'] = np.array(dataset['inputs'])
-dataset['labels'] = np.array(dataset['labels'])
-if len(dataset['labels']) < 3:
-    dataset['labels'] = dataset['labels'][0]
-num = len(dataset['labels'])
-print(dataset['labels'])
-mat_file = io.savemat(filename_total, dataset)
+dataset['labels'] = np.array(dataset['labels'][0])
+
+print("1total input shape: ", dataset['inputs'].shape)
+print("1total label shape: ", dataset['labels'].shape)
+print("1labelinfo: ", dataset['labelinfo'])
+
+# exit()
+# filename_total = 'dummy.mat'
+io.savemat(filename_total, dataset)
+# dataset = io.loadmat(filename_total)
 
 print("total input shape: ", dataset['inputs'].shape)
 print("total label shape: ", dataset['labels'].shape)
-mat_file = io.savemat(filename_total, dataset)
+print("1labelinfo: ", dataset['labelinfo'])
 
 
-shuffleidx = [n for n in range(num)]
+io.savemat(filename_total, dataset)
+
+
+shuffleidx = [n for n in range(len(dataset['labels']))]
 random.shuffle(shuffleidx)
 testidx = shuffleidx[:test_num]
 trainidx =shuffleidx[test_num:]
@@ -81,4 +110,4 @@ test_dataset = {'inputs': dataset['inputs'][testidx], 'labels': dataset['labels'
 mat_file = io.savemat(filename_train, train_dataset)
 mat_file = io.savemat(filename_test, test_dataset)
 
-print("이거 이제 옮겨라")
+print("-")
