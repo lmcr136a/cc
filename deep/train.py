@@ -7,7 +7,7 @@ from torch.nn import functional as F
 
 
 ##########################
-pretrained_path = None#'./best_model.pt'
+pretrained_path = './best_model.pt'
 device = torch.device('cuda:0')
 num_classes = 3
 learning_rate = 0.005
@@ -106,5 +106,6 @@ for t in range(epochs):
     scheduler.step()
     if score > best_loss:
         torch.save(net, 'best_model.pt')
+        best_loss = score
         print("Saved best model w score: ", score)
 print("Done!")
