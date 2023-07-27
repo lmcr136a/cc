@@ -27,7 +27,7 @@ class Trader():
         self.sym = symbol
 
         # 갑자기 올랐을때/ 떨어졌을 때 satisfying_profit 넘으면 close
-        self.satisfying_profit = 0.75*self.lev   # 20 일때 15%
+        self.satisfying_profit = 0.55*self.lev   # 20 일때 15%
 
         self.time_interval = 3
         self.tf_ = int(self.tf[:-1])
@@ -142,7 +142,7 @@ class Trader():
                 return 0
             if not self.status:
             
-                self.status = timing_to_position_score(self.binance, ms, self.sym, buying_cond=self.buying_cond, pre_cond=self.pre_cond, tf=self.tf, limit=self.limit, wins=self.wins)
+                self.status = timing_to_position(self.binance, ms, self.sym, buying_cond=self.buying_cond, pre_cond=self.pre_cond, tf=self.tf, limit=self.limit, wins=self.wins)
 
                 try:
                     # print("롱 숏 바뀜")
@@ -209,7 +209,7 @@ class Trader():
                             self.e_short(close=True)
                         else:
                             self.e_long(close=True)
-                        return 0  # finish the iteration
+                        return self.sym  # finish the iteration
                     except Exception as error:
                         print(error)
                 

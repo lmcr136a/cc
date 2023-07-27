@@ -33,7 +33,9 @@ if __name__ == "__main__":
     while 1:
         importlib.reload(trader)
         minion = trader.Trader(sym, args.symnum)
-        minion.run()
+        before_sym = minion.run()
+        with open('before_sym.txt', 'a') as f:
+            f.write("\n"+str(before_sym))
         sym = None
         if not args.re_execution:
             break

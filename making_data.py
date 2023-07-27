@@ -11,12 +11,12 @@ from utils import *
 마지막 수정: 2023 07 24
 """
 
-test_num = 20000
+test_num = 50000
 
-filename_total =  "total_dataset.mat"
-filename_train =  "train_dataset.mat"
-filename_test =  "test_dataset.mat"
-# dataset = io.loadmat(filename_total)
+filename_total =  "deep/total_dataset.mat"
+filename_train =  "deep/train_dataset.mat"
+filename_test =  "deep/test_dataset.mat"
+dataset = io.loadmat(filename_total)
 
 binance = get_binance()
 n = 48
@@ -25,7 +25,7 @@ ref = 0.55
 
 data = pd.DataFrame(columns = ['inputs', 'label'])
 
-dataset = {'inputs': [], 'labels': []} #################################################3
+# dataset = {'inputs': [], 'labels': []} #################################################3
 labelinfo = {"0":0, "1":0, "2":0}       # 0: 아무것도아님 1:상승 2:하락
 for sym in SYMLIST:
     df3 = past_data(binance, sym=sym, tf='3m', limit=1500)['close']

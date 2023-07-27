@@ -14,14 +14,17 @@ def get_model_prediction(binance, sym):
     input_ = np.expand_dims(input_, 0)  # 1, 2, 48
     input_ = np.expand_dims(input_, 0)  # 1, 1, 2, 48
 
-    net = torch.load(pretrained_path).to('cpu')
+    net = torch.load(pretrained_path, map_location=torch.device('cpu'))
 
     X = torch.tensor(input_, dtype=net.conv1.weight.dtype)
-    pred = net(X)
-    pred = torch.argmax(pred[0])
+    pred = net(X)[0]
+
+    p = list(map(lambda x: round(x, 1), pred.data.tolist()))
+    print(p, end='')
+    pred = torch.argmax(pred)
 
     if pred == 0:           # 아무것도아님
-        return 0
+        return None
     elif pred == 1:
         return LONG
     elif pred == 2:

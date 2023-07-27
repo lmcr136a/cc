@@ -10,7 +10,7 @@ from colorama import Fore, Style, init
 from bull_bear import *
 from datetime import datetime
 from HYPERPARAMETERS import *
-
+from get_model import get_model_prediction
 init(convert=True)
 
 def cal_compound_amt(wallet_usdt, lev, price, symnum):
@@ -26,6 +26,10 @@ def cal_compound_amt(wallet_usdt, lev, price, symnum):
 def select_sym(binance, __buying_cond, __pre_cond, tf, limit, wins, symnum):
     print("SEARCHING...")
     while 1:
+        with open("before_sym.txt", 'r') as f:
+            befores = f.read()
+        befores = befores.split("\n")
+        print(befores)
         random.shuffle(SYMLIST)
         for sym in SYMLIST:  # 0705 0.55초 걸림
             buying_cond, pre_cond = __buying_cond, __pre_cond
@@ -33,7 +37,7 @@ def select_sym(binance, __buying_cond, __pre_cond, tf, limit, wins, symnum):
             short_only, long_only, buying_cond, _ = actions
             
             ms = get_ms(binance, sym, tf, limit, wins)
-            timing_pos = timing_to_position_score(binance, ms, sym, buying_cond, pre_cond, tf, limit, wins, pr=False)
+            timing_pos = timing_to_position(binance, ms, sym, buying_cond, pre_cond, tf, limit, wins, pr=False)
             
             timing = False
             # if (timing_pos == SHORT and not long_only)\
@@ -49,7 +53,7 @@ def select_sym(binance, __buying_cond, __pre_cond, tf, limit, wins, symnum):
                 for position in positions:
                     if position["symbol"] == sym.replace("/", ""):
                         amt = float(position['positionAmt'])
-                        if amt == 0 and sym.split("/")[0] not in ["USDC", "ETC", "BNB", "BTC", "ETH", "BCH", "DASH", "XMR", "QNT", "LTC"]:
+                        if amt == 0 and sym not in befores and sym.split("/")[0] not in ["MKR", "USDC", "ETC", "BNB", "BTC", "ETH", "BCH", "DASH", "XMR", "QNT", "LTC"]:
                             print(f"\n!\n!\n{sym} OOOOO")
                             return sym
             else:
@@ -101,14 +105,17 @@ def timing_to_close(binance, sym, status, m4_shape,
     curr_pnl, profit = get_curr_pnl(binance, sym.replace("/", ""))
     if howmuchtime % 300 == 0:
         print("")
-    print(f"\r{sym} {howmuchtime} {status_str(status)}] PNL: {profit} ({pnlstr(round(curr_pnl, 1))}), SAT_P: {satisfying_price}\t", end="")
+
+    timing_pos = timing_to_position_score(binance, ms, sym, buying_cond, 0, tf, limit, wins, pr=False)
+    print(f"\r{sym.split('/')[0]} {howmuchtime} {status_str(status)}] PNL: {profit} ({pnlstr(round(curr_pnl, 1))})|{satisfying_price} timing: {timing_pos}\t", end="")
     # 이 이상 잃을 수는 없다
     if curr_pnl < max_loss:
         return True, curr_pnl
     elif curr_pnl < min_profit:
         return False, curr_pnl
 
-    timing_pos = timing_to_position_score(binance, ms, sym, buying_cond, 0, tf, limit, wins, pr=False)
+    # timing_pos = timing_to_position_score(binance, ms, sym, buying_cond, 0, tf, limit, wins, pr=False)
+    # print(timing_pos)
     if timing_pos:
         return False, curr_pnl
 
@@ -129,13 +136,23 @@ def timing_to_close(binance, sym, status, m4_shape,
                     (m4_shape=='n' and mvmt==RISING and last_diff < CALM and status == LONG)))
     
     # 적당히 먹었다!
-    sat_cond = not suddenly and curr_pnl > satisfying_price
+    sat_cond = curr_pnl > satisfying_price
 
     if sat_cond or (zz_cond or shape_cond):
         print(f"!!!{_y(sym)} {pnlstr(curr_pnl)} {shape_cond} {sat_cond} {zz_cond}")
         return True, curr_pnl
     else:
         return False, curr_pnl
+
+def timing_to_position(binance, ms, sym, buying_cond, pre_cond, tf, limit, wins, pr=True):
+    model_pred = timing_to_position_model(binance, sym)
+    rule_pred = timing_to_position_score(binance, ms, sym, buying_cond, pre_cond, tf, limit, wins, pr=pr)
+    if rule_pred == model_pred:
+        return rule_pred
+
+def timing_to_position_model(binance, sym):
+    return get_model_prediction(binance=binance, sym=sym)
+
 
 
 def timing_to_position_score(binance, ms, sym, buying_cond, pre_cond, tf, limit, wins, pr=True):
@@ -289,7 +306,7 @@ def log_wallet_history(balance):
     np.save('wallet_log.npy', wallet_info)
     plt.figure()
     plt.plot(wallet_info[0], wallet_info[1], 'k-')
-    plt.plot(wallet_info[0], wallet_info[2], 'b--')
+    plt.plot(wallet_info[0], wallet_info[2], 'b-')
     plt.savefig("wallet_log.png")
     plt.close()
 
