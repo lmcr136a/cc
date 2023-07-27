@@ -42,7 +42,7 @@ class CHistoryDataset(Dataset):
 
     def __getitem__(self, index):
         
-        inputs = minmax(self.inputs[index], index)
+        inputs = minmax_for_dataloader(self.inputs[index])
         inputs = self.default_trans(inputs)
         return inputs, self.labels[index]
     
@@ -50,7 +50,7 @@ class CHistoryDataset(Dataset):
         return len(self.inputs)
     
 
-def minmax(m, index):
+def minmax_for_dataloader(m):
     # print(m.shape, np.min(m), np.max(m))
     m = (m - np.min(m))/(np.max(m) - np.min(m))
     # 원래 0~1 사이인데, 그냥 -1~1로 하고싶음
