@@ -11,12 +11,12 @@ pretrained_path = './best_model.pt'
 device = torch.device('cuda:0')
 num_classes = 3
 learning_rate = 0.005
-B = 4096
+B = 1024
 ref = 0.7
 
 
 if pretrained_path:
-    net = torch.load(pretrained_path)
+    net = torch.load(pretrained_path, map_location=torch.device('cpu'))
 else:
     net = models.resnet18(pretrained=True)
     num_ftrs = net.fc.in_features
@@ -82,8 +82,9 @@ def test_loop(dataloader, model, loss_fn):
             size += len(pred)
     test_loss = float(test_loss)/float(num_batches)
     # if size > 0:
-    print(pred[:2])
-    print(y[:2])
+    # print(pred[:100])
+    # print(y[:100])
+    # exit()
     correct = float(correct)/size
     print(f"Prediction: {size} \n Accuracy: {(100*correct):>0.2f}%, Avg loss: {test_loss:>8f} \n")
     return correct
