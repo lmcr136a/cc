@@ -19,18 +19,18 @@ class CHistoryDataset(Dataset):
 
         data = io.loadmat(mat_file_name)
 
-        # idxs = []
-        # data['labels'] = data['labels'][0]
-        # for i, d in enumerate(data['inputs']):
-        #     if np.max(d) == np.min(d):
-        #         idxs.append(i)
-        #         print(i)
-        # print(data['inputs'].shape, data['labels'].shape)
-        # for i, idx in enumerate(idxs):
-        #     data['inputs'] = np.delete(data['inputs'], int(idx-i), axis=0)
-        #     data['labels'] = np.delete(data['labels'], int(idx-i), axis=0)
-        # print(data['inputs'].shape, data['labels'].shape)
-        # io.savemat(mat_file_name, data)
+        idxs = []
+        data['labels'] = data['labels'][0]
+        for i, d in enumerate(data['inputs']):
+            if np.max(d) == np.min(d):
+                idxs.append(i)
+                print(i)
+        print(data['inputs'].shape, data['labels'].shape)
+        for i, idx in enumerate(idxs):
+            data['inputs'] = np.delete(data['inputs'], int(idx-i), axis=0)
+            data['labels'] = np.delete(data['labels'], int(idx-i), axis=0)
+        print(data['inputs'].shape, data['labels'].shape)
+        io.savemat(mat_file_name, data)
 
         self.inputs = data['inputs']
         self.labels = data['labels']
