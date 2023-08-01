@@ -8,7 +8,7 @@ from torch.nn import functional as F
 
 ##########################
 pretrained_path = './best_model.pt'
-device = torch.device('cpu')
+device = torch.device('cuda')
 num_classes = 3
 learning_rate = 0.005
 B = 1024

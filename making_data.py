@@ -46,7 +46,7 @@ for sym in SYMLIST:
 
         if abs(diff_ratio_l) > abs(diff_ratio_h) and diff_ratio_l < -ref:
             label = 2
-            if labelinfo[2] > labelinfo[1]*1.02:
+            if labelinfo[2] > labelinfo[1]*1:
                 continue
             labelinfo[2] += 1
         elif abs(diff_ratio_l) < abs(diff_ratio_h) and diff_ratio_h > ref:
