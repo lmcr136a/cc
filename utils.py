@@ -374,7 +374,6 @@ def inv_minmax(m, val):
     original_val = (val/2+0.5)*(m.max() - m.min())+m.min()
     return original_val
 
-
 # 지그재그인지 확인, w 또는 m, n&u&un은 안됨
 def handle_zigzag(m1, hour=2, tf=1):
     # tf분봉으로 hour시간동안 0.9*max와 0.9*min에 몇번 도달했는지?
@@ -450,7 +449,7 @@ def m4_turn(m4, ref=0.005):
 
 
 def get_binance():
-    with open("a.txt") as f:
+    with open("hyoungjoon.txt") as f:
         lines = f.readlines()
         api_key = lines[0].strip()
         secret  = lines[1].strip()
@@ -492,3 +491,4 @@ def status_str(status):
         return _m(status)
     else:
         return status
+

@@ -21,6 +21,7 @@ class Trader():
         self.max_loss = -2                     # 마이너스인거 확인
         self.anx_pnl = -4
         self.min_profit = 0.2*self.lev          # 20 일때 11%  
+        self.ratio = 0.1
         
         if not symbol:
             symbol = select_sym(self.binance, self.buying_cond, self.pre_cond, 
@@ -52,6 +53,18 @@ class Trader():
         for asset in balance['info']['assets']:
             if asset['asset'] == 'USDT':
                 self.wallet_usdt = float(asset['availableBalance'])
+    def whether_filled(self):
+        balance = self.binance.fetch_balance()
+        positions = balance['info']['positions']
+
+        for position in positions:
+            if position['symbol'] == self.sym:
+                amt = float(position['positionAmt'])
+                if abs(amt) == 0:
+                    return True
+                else:
+                    return False
+        return False
 
     ## 현재 정보 조회
     def inquire_curr_info(self, init=False):
@@ -96,7 +109,7 @@ class Trader():
         info = self.binance.fetch_ticker(self.sym)
         return info['average']
 
-    def e_long(self, close=False):  # 오를것이다
+    def e_long_market(self, close=False):  # 오를것이다
         self.binance.load_markets()
         price = self.inquire_curr_price()
         market = self.binance.markets[self.sym]
@@ -111,7 +124,7 @@ class Trader():
             )
         self.order_id = order['id']
         
-    def e_short(self, close=False):  # 내릴것이다
+    def e_short_market(self, close=False):  # 내릴것이다
         self.binance.load_markets()
         price = self.inquire_curr_price()
         market = self.binance.markets[self.sym]
@@ -123,6 +136,38 @@ class Trader():
         order = self.binance.create_market_sell_order(
             symbol=self.sym,
             amount=np.abs(self.amount),
+            )
+        self.order_id = order['id']
+
+    def e_long_limit(self, close=False):  # 오를것이다
+        self.binance.load_markets()
+        price = self.inquire_curr_price() * (1 - self.ratio)
+        market = self.binance.markets[self.sym]
+        if self.set_lev:
+            resp = self.binance.set_leverage(
+                symbol=market['id'],
+                leverage=self.lev,
+            )
+        order = self.binance.create_limit_buy_order(
+            symbol=self.sym,
+            amount=np.abs(self.amount),
+            price= price,
+            )
+        self.order_id = order['id']
+        
+    def e_short_limit(self, close=False):  # 내릴것이다
+        self.binance.load_markets()
+        price = self.inquire_curr_price() * (1 + self.ratio)
+        market = self.binance.markets[self.sym]
+        if self.set_lev:
+            resp = self.binance.set_leverage(
+                symbol=market['id'],
+                leverage=self.lev,
+            )
+        order = self.binance.create_limit_sell_order(
+            symbol=self.sym,
+            amount=np.abs(self.amount),
+            price= price,
             )
         self.order_id = order['id']
 
@@ -147,10 +192,10 @@ class Trader():
                 try:
                     # print("롱 숏 바뀜")
                     if self.status == LONG:
-                        self.e_long()
+                        self.e_long_market()
                         add_to_existing_positions(LONG)
                     elif self.status == SHORT:
-                        self.e_short()
+                        self.e_short_market()
                         add_to_existing_positions(SHORT)
                 except Exception as error:
                     print(error)
@@ -204,43 +249,23 @@ class Trader():
                 #                 print(f"curr_pnl: {pnlstr(curr_pnl)}    satisfying_pnl: {pnlstr(self.satisfying_profit)}")
                 #             pnl_lastupdate = time.time()
 
-                # 포지션과 반대되는 방향으로 m3그래프가 변하면
-                # 현재 포지션 정리, 반대 포지션으로 바꿈
-                have2chg = False
-                # if (iter)%((3600/4)/self.time_interval) == 0 and iter > 0: # 3600 == 1h, every 15min
-                #     have2chg = isit_wrong_position(m2, self.status, n=4)  # d(3분봉) 4개 => 18분
-                
                 if close_position:
                     try:
                         if self.status == LONG:
-                            self.e_short(close=True)
+                            self.e_short_limit(close=True)
                             pop_from_existing_positions(LONG)
                         else:
-                            self.e_long(close=True)
+                            self.e_long_limit(close=True)
                             pop_from_existing_positions(SHORT)
-                        return self.sym  # finish the iteration
+                
+                        #
+                        while 1:
+                            if self.whether_filled() == True:
+                                return self.sym  # finish the iteration
+
                     except Exception as error:
                         print(error)
                 
-                # if have2chg:
-                #     complete = False
-                #     print(f"I think {self.status} position is wrong.. I'll change it to opposite pos.")
-                #     while not complete:
-                #         try:
-                #             if self.status == LONG:
-                #                 self.e_short(close=True)
-                #                 self.e_short()
-                #                 self.status = SHORT
-                #                 print("Changed to SHORT")
-                #             else:
-                #                 self.e_long(close=True)
-                #                 self.e_long()
-                #                 self.status = LONG
-                #                 print("Changed to LONG")
-                #             complete = True
-                #             time.sleep(1)
-                #         except Exception as error:
-                #             print(error)
 
 
             time.sleep(self.time_interval)
