@@ -27,8 +27,11 @@ class Trader():
 
 
         self.min_profit = profit #0.3*self.lev          # 20 일때 11%  
-        self.ratio = 0.1
         
+        ################################
+        self.ratio = 6 *0.01/self.lev
+        ################################
+
         if not symbol:
             symbol = select_sym(self.binance, self.buying_cond, self.pre_cond, 
                                 self.tf, self.limit, self.wins, self.symnum)
@@ -147,7 +150,9 @@ class Trader():
 
     def e_long_limit(self, close=False):  # 오를것이다
         self.binance.load_markets()
-        price = self.inquire_curr_price() * (1 - self.ratio)
+        price = self.inquire_curr_price() #* (1 - self.ratio)
+        print(price, price*(1 - self.ratio), self.ratio)
+        # exit()
         market = self.binance.markets[self.sym]
         if self.set_lev:
             resp = self.binance.set_leverage(
@@ -163,7 +168,9 @@ class Trader():
         
     def e_short_limit(self, close=False):  # 내릴것이다
         self.binance.load_markets()
-        price = self.inquire_curr_price() * (1 + self.ratio)
+        price = self.inquire_curr_price() #* (1 + self.ratio)
+        print(price, price*(1 + self.ratio), self.ratio)
+        # exit()
         market = self.binance.markets[self.sym]
         if self.set_lev:
             resp = self.binance.set_leverage(
@@ -199,82 +206,99 @@ class Trader():
                     # print("롱 숏 바뀜")
                     if self.status == LONG:
                         self.e_long_market()
+
+                        time.sleep(self.time_interval)
                         add_to_existing_positions(LONG)
+
+                        self.e_short_limit(close=True)
+                        pop_from_existing_positions(LONG)
+
                     elif self.status == SHORT:
                         self.e_short_market()
+
+                        time.sleep(self.time_interval)
                         add_to_existing_positions(SHORT)
+
+                        self.e_long_limit(close=True)
+                        pop_from_existing_positions(SHORT)
+            
+                    while 1:
+                        time.sleep(self.time_interval)
+                        if self.whether_filled() == True:
+                            print("Limit Market Filled")
+                            return self.sym  # finish the iteration
                 except Exception as error:
                     print(error)
                     self.status = None
                     if "Leverage" in str(error):
                         self.lev = round(0.5*self.lev)
 
-                if not self.status:
-                    self.missed_timing += 1
+            #     if not self.status:
+            #         self.missed_timing += 1
 
-            else :
-                # 시간이 오래 지날수록 욕심을 버리기
-                if (iter)%((3600/2)/self.time_interval) == 0 and iter > 0: # 3600 == 1h
-                    loss_count = np.sum(np.where(np.array(self.pre_pnls) < 0, 1, 0))
-                    loss_ratio = loss_count/len(self.pre_pnls)  # 값이 크면 계속 잃었던 것
-                    self.satisfying_profit *= 0.8
-                    self.satisfying_profit = round(max(self.satisfying_profit, self.min_profit), 2)
+            # else :
+            #     # 시간이 오래 지날수록 욕심을 버리기
+            #     if (iter)%((3600/2)/self.time_interval) == 0 and iter > 0: # 3600 == 1h
+            #         loss_count = np.sum(np.where(np.array(self.pre_pnls) < 0, 1, 0))
+            #         loss_ratio = loss_count/len(self.pre_pnls)  # 값이 크면 계속 잃었던 것
+            #         self.satisfying_profit *= 0.8
+            #         self.satisfying_profit = round(max(self.satisfying_profit, self.min_profit), 2)
 
-                m4_shape = m4_turn(ms[3])
+            #     m4_shape = m4_turn(ms[3])
 
-                # curr pnl을 return하는건 그냥임
-                close_position, curr_pnl = timing_to_close(binance=self.binance, sym=self.sym, status=self.status, 
-                        m4_shape=m4_shape, ms=ms, satisfying_price=self.satisfying_profit, 
-                        max_loss=self.max_loss, min_profit=self.min_profit, buying_cond=self.buying_cond, howmuchtime=iter,
-                        tf=self.tf, limit=self.limit, wins=self.wins)
-                self.pre_pnls.append(curr_pnl)
+            #     # curr pnl을 return하는건 그냥임
+            #     close_position, curr_pnl = timing_to_close(binance=self.binance, sym=self.sym, status=self.status, 
+            #             m4_shape=m4_shape, ms=ms, satisfying_price=self.satisfying_profit, 
+            #             max_loss=self.max_loss, min_profit=self.min_profit, buying_cond=self.buying_cond, howmuchtime=iter,
+            #             tf=self.tf, limit=self.limit, wins=self.wins)
+            #     self.pre_pnls.append(curr_pnl)
 
-                # h = int(round(3600/self.time_interval))
-                # if time.time() - pnl_lastupdate > 0.1*h and len(self.pre_pnls) > 2*h:
-                #     if curr_pnl < self.anx_pnl and curr_pnl > self.max_loss:
-                #         self.satisfying_profit = 0.9*np.max(self.pre_pnls[-2*h:]) # 두시간
-                #         pnl_lastupdate = time.time()
+            #     # h = int(round(3600/self.time_interval))
+            #     # if time.time() - pnl_lastupdate > 0.1*h and len(self.pre_pnls) > 2*h:
+            #     #     if curr_pnl < self.anx_pnl and curr_pnl > self.max_loss:
+            #     #         self.satisfying_profit = 0.9*np.max(self.pre_pnls[-2*h:]) # 두시간
+            #     #         pnl_lastupdate = time.time()
 
-                #     if (curr_pnl > self.pre_pnls[-int(0.2*h)]) and curr_pnl > 0:
-                #         earning_60s =  curr_pnl - self.pre_pnls[-h]
+            #     #     if (curr_pnl > self.pre_pnls[-int(0.2*h)]) and curr_pnl > 0:
+            #     #         earning_60s =  curr_pnl - self.pre_pnls[-h]
 
-                #         if time.time() - pnl_lastupdate < 0.5*h and self.satisfying_profit - curr_pnl > 4:
-                #             # 30분이내 전에 업데이트 했는데 아직 satisfying_pnl까지 4 이상 차이가 나면 걍 냅두기
-                #             pass
-                #         else:
-                #             if earning_60s > 3:
-                #                 self.satisfying_profit += 3
-                #                 print(f"curr_pnl: {pnlstr(curr_pnl)}    satisfying_pnl: {pnlstr(self.satisfying_profit)}")
+            #     #         if time.time() - pnl_lastupdate < 0.5*h and self.satisfying_profit - curr_pnl > 4:
+            #     #             # 30분이내 전에 업데이트 했는데 아직 satisfying_pnl까지 4 이상 차이가 나면 걍 냅두기
+            #     #             pass
+            #     #         else:
+            #     #             if earning_60s > 3:
+            #     #                 self.satisfying_profit += 3
+            #     #                 print(f"curr_pnl: {pnlstr(curr_pnl)}    satisfying_pnl: {pnlstr(self.satisfying_profit)}")
 
-                #             elif earning_60s > 6 and self.satisfying_profit < 50:
-                #                 self.satisfying_profit += earning_60s
-                #                 print(f"curr_pnl: {pnlstr(curr_pnl)}    satisfying_pnl: {pnlstr(self.satisfying_profit)}")
+            #     #             elif earning_60s > 6 and self.satisfying_profit < 50:
+            #     #                 self.satisfying_profit += earning_60s
+            #     #                 print(f"curr_pnl: {pnlstr(curr_pnl)}    satisfying_pnl: {pnlstr(self.satisfying_profit)}")
                                 
-                #             elif earning_60s > 10:
-                #                 self.satisfying_profit += earning_60s
-                #                 print(f"curr_pnl: {pnlstr(curr_pnl)}    satisfying_pnl: {pnlstr(self.satisfying_profit)}")
-                #             pnl_lastupdate = time.time()
+            #     #             elif earning_60s > 10:
+            #     #                 self.satisfying_profit += earning_60s
+            #     #                 print(f"curr_pnl: {pnlstr(curr_pnl)}    satisfying_pnl: {pnlstr(self.satisfying_profit)}")
+            #     #             pnl_lastupdate = time.time()
 
-                if close_position:
-                    try:
-                        if self.status == LONG:
-                            self.e_short_limit(close=True)
-                            pop_from_existing_positions(LONG)
-                        else:
-                            self.e_long_limit(close=True)
-                            pop_from_existing_positions(SHORT)
+            #     if close_position:
+            #         try:
+            #             if self.status == LONG:
+            #                 self.e_short_limit(close=True)
+            #                 pop_from_existing_positions(LONG)
+            #             else:
+            #                 self.e_long_limit(close=True)
+            #                 pop_from_existing_positions(SHORT)
                 
-                        #
-                        while 1:
-                            time.sleep(self.time_interval)
-                            if self.whether_filled() == True:
-                                print("Limit Market Filled")
-                                return self.sym  # finish the iteration
+            #             #
+            #             while 1:
+            #                 time.sleep(self.time_interval)
+            #                 if self.whether_filled() == True:
+            #                     print("Limit Market Filled")
+            #                     return self.sym  # finish the iteration
 
-                    except Exception as error:
-                        print(error)
+            #         except Exception as error:
+            #             print(error)
                 
 
 
-            time.sleep(self.time_interval)
-            iter += 1
+            # time.sleep(self.time_interval)
+            # iter += 1
