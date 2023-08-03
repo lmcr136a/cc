@@ -69,7 +69,7 @@ def select_sym(binance, __buying_cond, __pre_cond, tf, limit, wins, symnum):
                 timing = True
 
             if timing:
-                # print(sym, "Timing")
+                print(sym, "Timing")
 
                 balance = binance.fetch_balance()
                 positions = balance['info']['positions']
