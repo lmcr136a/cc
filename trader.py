@@ -18,9 +18,15 @@ class Trader():
         self.lev = 20
         self.wins = [1, 8, 15, 70]              # 3번째
         self.limit = self.wins[-1]*10           # for past_data
-        self.max_loss = -2                     # 마이너스인거 확인
         self.anx_pnl = -4
-        self.min_profit = 0.2*self.lev          # 20 일때 11%  
+        
+        ###############################################
+        self.max_loss = -2                     # 마이너스인거 확인
+        profit = 6
+        ###############################################
+
+
+        self.min_profit = profit #0.3*self.lev          # 20 일때 11%  
         self.ratio = 0.1
         
         if not symbol:
@@ -28,7 +34,7 @@ class Trader():
                                 self.tf, self.limit, self.wins, self.symnum)
         self.sym = symbol
 
-        self.satisfying_profit = 0.2*self.lev   # 20 일때 2%
+        self.satisfying_profit = profit #0.2*self.lev   # 20 일때 2%
 
         self.time_interval = 3
         self.tf_ = int(self.tf[:-1])
@@ -260,7 +266,9 @@ class Trader():
                 
                         #
                         while 1:
+                            time.sleep(self.time_interval)
                             if self.whether_filled() == True:
+                                print("Limit Market Filled")
                                 return self.sym  # finish the iteration
 
                     except Exception as error:

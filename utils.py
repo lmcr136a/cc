@@ -449,7 +449,7 @@ def m4_turn(m4, ref=0.005):
 
 
 def get_binance():
-    with open("hyoungjoon.txt") as f:
+    with open("a.txt") as f:
         lines = f.readlines()
         api_key = lines[0].strip()
         secret  = lines[1].strip()
