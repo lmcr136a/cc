@@ -33,6 +33,7 @@ def bull_or_bear(binance, sym, mode=1):
     mode 2: 12시간 > 15m * (4*12=48)개
     mode 3: 36시간 > 1h * 36개
     """
+    mode = 3
     if mode == 3:
         tf, n, a = '5m', 48, 2
     elif mode == 2:
@@ -44,6 +45,10 @@ def bull_or_bear(binance, sym, mode=1):
     rising = []
     for i in range(1, len(m)-1):
         rising.append((m[i+1] - m[i])/m[i]*100)
+
+    rising_coef = np.mean(rising)*a
+    # 그 ㅈㄴ예쁘게 올라가는게 0.142, 0.00567, 0.155
+            
     rising_coef = np.mean(rising)*a
     # print(m.keys()[0], rising_coef, len(m))
     if rising_coef > 0.04:
