@@ -18,17 +18,16 @@ class Trader():
         self.lev = 20
         self.wins = [1, 8, 15, 70]              # 3번째
         self.limit = self.wins[-1]*10           # for past_data
-        self.max_loss = -90                     # 마이너스인거 확인
-        self.anx_pnl = -10
-        self.min_profit = 4*self.lev          # 20 일때 11%  
+        self.max_loss = -2                     # 마이너스인거 확인
+        self.anx_pnl = -4
+        self.min_profit = 0.2*self.lev          # 20 일때 11%  
         
         if not symbol:
             symbol = select_sym(self.binance, self.buying_cond, self.pre_cond, 
                                 self.tf, self.limit, self.wins, self.symnum)
         self.sym = symbol
 
-        # 갑자기 올랐을때/ 떨어졌을 때 satisfying_profit 넘으면 close
-        self.satisfying_profit = 1.0*self.lev   # 20 일때 20%
+        self.satisfying_profit = 0.2*self.lev   # 20 일때 2%
 
         self.time_interval = 3
         self.tf_ = int(self.tf[:-1])
@@ -43,8 +42,8 @@ class Trader():
         print(f"{'*'*50}\nwallet:{round(self.wallet_usdt, 3)}  tf: {self.tf}  lev:{self.lev}  \
 \namt: {self.amount}  inf: {self.wins}\n{'*'*50}  [[{self.max_loss}~{self.min_profit}]]")
 
-        actions = inspect_market(self.binance, self.sym, self.satisfying_profit, self.buying_cond)
-        self.short_only, self.long_only, self.buying_cond, self.satisfying_profit = actions
+        # actions = inspect_market(self.binance, self.sym, self.satisfying_profit, self.buying_cond)
+        # self.short_only, self.long_only, self.buying_cond, self.satisfying_profit = actions
 
     def update_wallet(self, balance=None):
         if not balance:
@@ -129,7 +128,7 @@ class Trader():
 
 
     def run(self):
-        print("\nStarting status: ", self.status)
+        # print("\nStarting status: ", self.status)
         iter = 0
         self.anxious = 1
         self.pre_pnls = []
@@ -139,7 +138,7 @@ class Trader():
             # importlib.reload(utils)
             ms = get_ms(self.binance, self.sym, self.tf, self.limit, self.wins)
             
-            if self.missed_timing > 10:
+            if self.missed_timing > 3:
                 return 0
             if not self.status:
             
@@ -179,31 +178,31 @@ class Trader():
                         tf=self.tf, limit=self.limit, wins=self.wins)
                 self.pre_pnls.append(curr_pnl)
 
-                h = int(round(3600/self.time_interval))
-                if time.time() - pnl_lastupdate > 0.1*h and len(self.pre_pnls) > 2*h:
-                    if curr_pnl < self.anx_pnl and curr_pnl > self.max_loss:
-                        self.satisfying_profit = 0.9*np.max(self.pre_pnls[-2*h:]) # 두시간
-                        pnl_lastupdate = time.time()
+                # h = int(round(3600/self.time_interval))
+                # if time.time() - pnl_lastupdate > 0.1*h and len(self.pre_pnls) > 2*h:
+                #     if curr_pnl < self.anx_pnl and curr_pnl > self.max_loss:
+                #         self.satisfying_profit = 0.9*np.max(self.pre_pnls[-2*h:]) # 두시간
+                #         pnl_lastupdate = time.time()
 
-                    if (curr_pnl > self.pre_pnls[-int(0.2*h)]) and curr_pnl > 0:
-                        earning_60s =  curr_pnl - self.pre_pnls[-h]
+                #     if (curr_pnl > self.pre_pnls[-int(0.2*h)]) and curr_pnl > 0:
+                #         earning_60s =  curr_pnl - self.pre_pnls[-h]
 
-                        if time.time() - pnl_lastupdate < 0.5*h and self.satisfying_profit - curr_pnl > 4:
-                            # 30분이내 전에 업데이트 했는데 아직 satisfying_pnl까지 4 이상 차이가 나면 걍 냅두기
-                            pass
-                        else:
-                            if earning_60s > 3:
-                                self.satisfying_profit += 3
-                                print(f"curr_pnl: {pnlstr(curr_pnl)}    satisfying_pnl: {pnlstr(self.satisfying_profit)}")
+                #         if time.time() - pnl_lastupdate < 0.5*h and self.satisfying_profit - curr_pnl > 4:
+                #             # 30분이내 전에 업데이트 했는데 아직 satisfying_pnl까지 4 이상 차이가 나면 걍 냅두기
+                #             pass
+                #         else:
+                #             if earning_60s > 3:
+                #                 self.satisfying_profit += 3
+                #                 print(f"curr_pnl: {pnlstr(curr_pnl)}    satisfying_pnl: {pnlstr(self.satisfying_profit)}")
 
-                            elif earning_60s > 6 and self.satisfying_profit < 50:
-                                self.satisfying_profit += earning_60s
-                                print(f"curr_pnl: {pnlstr(curr_pnl)}    satisfying_pnl: {pnlstr(self.satisfying_profit)}")
+                #             elif earning_60s > 6 and self.satisfying_profit < 50:
+                #                 self.satisfying_profit += earning_60s
+                #                 print(f"curr_pnl: {pnlstr(curr_pnl)}    satisfying_pnl: {pnlstr(self.satisfying_profit)}")
                                 
-                            elif earning_60s > 10:
-                                self.satisfying_profit += earning_60s
-                                print(f"curr_pnl: {pnlstr(curr_pnl)}    satisfying_pnl: {pnlstr(self.satisfying_profit)}")
-                            pnl_lastupdate = time.time()
+                #             elif earning_60s > 10:
+                #                 self.satisfying_profit += earning_60s
+                #                 print(f"curr_pnl: {pnlstr(curr_pnl)}    satisfying_pnl: {pnlstr(self.satisfying_profit)}")
+                #             pnl_lastupdate = time.time()
 
                 # 포지션과 반대되는 방향으로 m3그래프가 변하면
                 # 현재 포지션 정리, 반대 포지션으로 바꿈

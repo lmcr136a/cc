@@ -11,7 +11,8 @@ from bull_bear import *
 from datetime import datetime
 from HYPERPARAMETERS import *
 from get_model import get_model_prediction
-init(convert=True)
+
+# init(convert=True)
 
 def cal_compound_amt(wallet_usdt, lev, price, symnum):
     return np.float(wallet_usdt*lev/float(price)*0.9/float(symnum))
@@ -23,30 +24,35 @@ def cal_compound_amt(wallet_usdt, lev, price, symnum):
 
 """
 
+def curr_states_other_minions():
+    with open("before_sym.txt", 'r') as f:
+        befores = f.read()
+    befores = befores.split("\n")
+    # print(befores)
+    positions = get_existing_positions()
+    n1, n2 = 0, 0
+    for pos in positions:
+        if pos == LONG:
+            n1 +=1
+        elif pos == SHORT:
+            n2 += 1
+    short_only_strong, long_only_strong = False, False
+    if n1 > 3:
+        short_only_strong = True
+        # print("Short Only..")
+    if n2 > 3:
+        long_only_strong = True
+        # print("Long Only...")
+    return short_only_strong, long_only_strong, befores
+
+
 def select_sym(binance, __buying_cond, __pre_cond, tf, limit, wins, symnum):
-    print("SEARCHING...")
+    print(_y("\nSEARCHING..."))
     while 1:
-        with open("before_sym.txt", 'r') as f:
-            befores = f.read()
-        befores = befores.split("\n")
-        print(befores)
         random.shuffle(SYMLIST)
-        positions = get_existing_positions()
-        n1, n2 = 0, 0
-        for pos in positions:
-            if pos == LONG:
-                n1 +=1
-            elif pos == SHORT:
-                n2 += 1
-        short_only_strong, long_only_strong = False, False
-        if n1 > 3:
-            short_only_strong = True
-            print("Short Only..")
-        if n2 > 3:
-            long_only_strong = True
-            print("Long Only...")
         
         for sym in SYMLIST:  # 0705 0.55초 걸림
+            short_only_strong, long_only_strong, befores = curr_states_other_minions()
             buying_cond, pre_cond = __buying_cond, __pre_cond
             actions = inspect_market(binance, sym, 1, buying_cond, print_=False)
             short_only, long_only, buying_cond, _ = actions
@@ -63,7 +69,7 @@ def select_sym(binance, __buying_cond, __pre_cond, tf, limit, wins, symnum):
                 timing = True
 
             if timing:
-                print(sym, "Timing")
+                # print(sym, "Timing")
 
                 balance = binance.fetch_balance()
                 positions = balance['info']['positions']
@@ -71,7 +77,7 @@ def select_sym(binance, __buying_cond, __pre_cond, tf, limit, wins, symnum):
                     if position["symbol"] == sym.replace("/", ""):
                         amt = float(position['positionAmt'])
                         if amt == 0 and sym not in befores and sym.split("/")[0] not in ["MKR", "USDC", "ETC", "BNB", "BTC", "ETH", "BCH", "DASH", "XMR", "QNT", "LTC"]:
-                            print(f"\n!\n!\n{sym} OOOOO")
+                            print(f"S{sym} OOOOO")
                             return sym
             else:
                 time.sleep(0.3*symnum)
@@ -108,7 +114,13 @@ def whether_calm(m1, ref=0.05, n=80):
         return False
     
 def get_curr_pnl(binance, sym):
-    wallet = binance.fetch_balance(params={"type": "future"})
+    try:
+        wallet = binance.fetch_balance(params={"type": "future"})
+    except Exception as E:
+        print(E)
+        time.sleep(3)
+        wallet = binance.fetch_balance(params={"type": "future"})
+    
     positions = wallet['info']['positions']
     for pos in positions:
         if pos['symbol'] == sym:
@@ -124,6 +136,11 @@ def timing_to_close(binance, sym, status, m4_shape,
                     ms, satisfying_price, max_loss, min_profit, buying_cond, howmuchtime, tf, limit, wins,):
     m1 = ms[0]
     curr_pnl, profit = get_curr_pnl(binance, sym.replace("/", ""))
+    
+    sat_cond = curr_pnl > satisfying_price
+    if sat_cond:
+        print(f"\n!!! Satisfied: {curr_pnl}")
+        return True, curr_pnl
     if howmuchtime % 300 == 0:
         print("")
 
@@ -131,6 +148,7 @@ def timing_to_close(binance, sym, status, m4_shape,
     print(f"\r{sym.split('/')[0]} {howmuchtime} {status_str(status)}] PNL: {profit} ({pnlstr(round(curr_pnl, 1))})|{satisfying_price} timing: {timing_pos}\t", end="")
     # 이 이상 잃을 수는 없다
     if curr_pnl < max_loss:
+        print(f"\n!!! max_loss: {curr_pnl}")
         return True, curr_pnl
     elif curr_pnl < min_profit:
         return False, curr_pnl
@@ -201,7 +219,7 @@ def timing_to_position_score(binance, ms, sym, buying_cond, pre_cond, tf, limit,
 
     curr_mvmt, curr_diff = curr_movement(m1, minute=5)  # 5개 시간봉의 움직임
     big_shape = np.diff(m4)[-3:]
-    small_shape = shape_info(m3)
+    small_shape = shape_info(m2)
 
     actions = inspect_market(binance, sym, 1, buying_cond, print_=False)
     short_only, long_only, buying_cond, satisfying_pnl = actions
@@ -210,29 +228,25 @@ def timing_to_position_score(binance, ms, sym, buying_cond, pre_cond, tf, limit,
     """
     그래프의 위치, 장의 흐름, 지금 당장의 움직임, 큰 흐름(m4)
     """
-    if mm1[-1] > buying_cond and curr_mvmt == FALLING \
-        and np.all(big_shape > 0):
-        if pr:
-            print(f"[CASE1] cond: {mm1[-1]}>{buying_cond} , curr_mvmt:{curr_mvmt}")
-            print(f"{np.all(big_shape > 0)} {small_shape}")
-        if small_shape == INCREASING_CONCAVE:  
-            # 오목, 증가
-            return LONG
-        elif small_shape == DECREASING_CONVEX:
-            # 볼록, 감소
-            return SHORT
-        
-    elif mm1[-1] < -buying_cond and curr_mvmt == RISING \
-        and np.all(big_shape < 0):
-        if pr:
-            print(f"[CASE2] cond: {mm1[-1]}<{-buying_cond} curr_mvmt: {curr_mvmt}")
-            print(f"{np.all(big_shape < 0)} {small_shape}")
+    if curr_mvmt == FALLING:
         # if small_shape == INCREASING_CONCAVE:  
         #     # 오목, 증가
         #     return LONG
         if small_shape == DECREASING_CONVEX:
+            if pr:
+                print(f"[{sym[:-5]} CASE1] curr_mvmt:{curr_mvmt} {small_shape}")
             # 볼록, 감소
             return SHORT
+        
+    elif curr_mvmt == RISING:
+        if small_shape == INCREASING_CONCAVE:  
+            if pr:
+                print(f"[{sym[:-5]} CASE2] curr_mvmt:{curr_mvmt} {small_shape}")
+            # 오목, 증가
+            return LONG
+        # if small_shape == DECREASING_CONVEX:
+        #     # 볼록, 감소
+        #     return SHORT
         
 
     # """
@@ -464,9 +478,9 @@ def _m(str):
     return f"{Fore.MAGENTA}{str}{Style.RESET_ALL}"
 
 def pnlstr(pnlstr):
-    if float(pnlstr) < 0:
+    if float(pnlstr) < -1:
         return _r(str(pnlstr)+"%")
-    elif float(pnlstr) > 0:
+    elif float(pnlstr) > 1:
         return _c(str(pnlstr)+"%")
     else:
         return str(pnlstr)+"%"

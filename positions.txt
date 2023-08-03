@@ -1,1 +1,1 @@
-['Long', 'Long', 'Long', 'Long', 'Short', 'Short', 'Short', 'Short']
+['Short']
