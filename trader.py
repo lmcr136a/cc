@@ -10,50 +10,32 @@ class Trader():
         self.binance = get_binance()
         self.symnum = float(symnum)
         self.other_running_sym_num = 0
-        self.cond1 = 0.2
-        self.pre_cond = 0.0
-        self.buying_cond = self.cond1
-        self.order_num = 1                      # 거래 한번만
         self.tf = '3m'
+        self.tf_ = int(self.tf[:-1])
         self.lev = 20
         self.wins = [1, 8, 15, 70]              # 3번째
         self.limit = self.wins[-1]*10           # for past_data
-        self.anx_pnl = -4
-        
-        ###############################################
-        self.max_loss = -2                     # 마이너스인거 확인
-        profit = 6
-        ###############################################
 
-
-        self.min_profit = profit #0.3*self.lev          # 20 일때 11%  
-        
-        ################################
-        self.ratio = 6 *0.01/self.lev
-        ################################
+        #########################################
+        self.anx_pnl = -40
+        self.p = 6 *0.01/self.lev
+        #########################################
 
         if not symbol:
-            symbol = select_sym(self.binance, self.buying_cond, self.pre_cond, 
-                                self.tf, self.limit, self.wins, self.symnum)
+            symbol = select_sym(self.binance, self.tf, self.limit, self.wins, self.symnum)
+
         self.sym = symbol
 
-        self.satisfying_profit = profit #0.2*self.lev   # 20 일때 2%
-
         self.time_interval = 3
-        self.tf_ = int(self.tf[:-1])
         self.set_lev = True                     # 기존거 가져오는경우 다시 set하면 에러나기때문
         self.binance.load_markets()
-        self.last_order = 0
         self.inquire_curr_info(init=True)
 
         if self.set_lev:  # 기존꺼 가져오는 경우가 아니라 걍 첨에 시작하는 경우
             self.amount = cal_compound_amt(self.wallet_usdt, self.lev, float(self.inquire_curr_price()), self.symnum)
         
-        print(f"{'*'*50}\nwallet:{round(self.wallet_usdt, 3)}  tf: {self.tf}  lev:{self.lev}  \
-\namt: {self.amount}  inf: {self.wins}\n{'*'*50}  [[{self.max_loss}~{self.min_profit}]]")
+        print(f"{'*'*50}\nwallet:{round(self.wallet_usdt, 3)}  tf: {self.tf}  lev:{self.lev} amt: {self.amount}")
 
-        # actions = inspect_market(self.binance, self.sym, self.satisfying_profit, self.buying_cond)
-        # self.short_only, self.long_only, self.buying_cond, self.satisfying_profit = actions
 
     def update_wallet(self, balance=None):
         if not balance:
@@ -62,18 +44,6 @@ class Trader():
         for asset in balance['info']['assets']:
             if asset['asset'] == 'USDT':
                 self.wallet_usdt = float(asset['availableBalance'])
-    def whether_filled(self):
-        balance = self.binance.fetch_balance()
-        positions = balance['info']['positions']
-
-        for position in positions:
-            if position['symbol'] == self.sym:
-                amt = float(position['positionAmt'])
-                if abs(amt) == 0:
-                    return True
-                else:
-                    return False
-        return False
 
     ## 현재 정보 조회
     def inquire_curr_info(self, init=False):
@@ -150,46 +120,41 @@ class Trader():
         self.order_id = order['id']
         return price
 
-    def e_long_limit(self, price, close=False):  # 오를것이다
-        # print(price)
+    def close_short_limit(self, price, close=False):  # 숏산거 팔때
         self.binance.load_markets()
-        price = price * (0.997)
-        # print(price)
-        market = self.binance.markets[self.sym]
-        if self.set_lev:
-            resp = self.binance.set_leverage(
-                symbol=market['id'],
-                leverage=self.lev,
-            )
+        price = price * (1 - self.ratio)
         order = self.binance.create_limit_buy_order(
             symbol=self.sym,
             amount=np.abs(self.amount),
             price= price,
             )
-        self.order_id = order['id']
 
         
-    def e_short_limit(self, price, close=False):  # 내릴것이다
-        # print(price)
+    def close_long_limit(self, price, close=False):  # 롱산거 팔때
         self.binance.load_markets()
-        price = price * (1.003)
-        # print(price)
-        market = self.binance.markets[self.sym]
-        if self.set_lev:
-            resp = self.binance.set_leverage(
-                symbol=market['id'],
-                leverage=self.lev,
-            )
+        price = price * (1 + self.ratio)
         order = self.binance.create_limit_sell_order(
             symbol=self.sym,
             amount=np.abs(self.amount),
             price= price,
             )
-        self.order_id = order['id']
 
+
+    def order_filled(self):
+        balance = self.binance.fetch_balance()
+        positions = balance['info']['positions']
+
+        for position in positions:
+            if position['symbol'] == self.sym.replace("/", ""):
+                amt = float(position['positionAmt'])
+                # print(amt)
+                if abs(amt) == 0:
+                    return True
+                else:
+                    return False
+        return False
 
     def run(self):
-        # print("\nStarting status: ", self.status)
         self.inquire_curr_price()
         iter = 0
         self.anxious = 1
@@ -197,118 +162,64 @@ class Trader():
         self.missed_timing = 0
         pnl_lastupdate = 0
         while 1:
-            # importlib.reload(utils)
+            # importlib.reload(utils)  > TODO: 에러많이남
             ms = get_ms(self.binance, self.sym, self.tf, self.limit, self.wins)
             
             if self.missed_timing > 3:
                 return 0
+            
             if not self.status:
             
-                self.status = timing_to_position(self.binance, ms, self.sym, buying_cond=self.buying_cond, pre_cond=self.pre_cond, tf=self.tf, limit=self.limit, wins=self.wins)
+                self.status = timing_to_position(self.binance, ms, self.sym, self.tf, pr=True)
 
                 try:
-                    # print("롱 숏 바뀜")
                     if self.status == LONG:
                         price = self.e_long_market()
-
                         time.sleep(0.1)
                         # add_to_existing_positions(LONG)
-
-                        self.e_short_limit(price=price, close=True)
+                        close_func = self.close_long_limit
                         # pop_from_existing_positions(LONG)
 
                     elif self.status == SHORT:
                         price =self.e_short_market()
-
                         time.sleep(0.1)
                         # add_to_existing_positions(SHORT)
-
-                        self.e_long_limit(price=price, close=True)
+                        close_func = self.close_short_limit
                         # pop_from_existing_positions(SHORT)
+                    close_func(price=price, close=True)
             
                 except Exception as error:
                     print(error)
                     self.status = None
                     if "Leverage" in str(error):
                         self.lev = round(0.5*self.lev)
+                    else:
+                        exit()
+            else:
+                # checkpoint일때
+                if self.status == LONG:
+                    close_func = self.close_long_limit
+                elif self.status == SHORT:
+                    close_func = self.close_short_limit
 
-            while 1:
+
+            while not self.order_filled():
+                iter += 1
                 time.sleep(self.time_interval)
                 
                 curr_pnl, profit = get_curr_pnl(self.binance, self.sym.replace("/", ""))
-                print(f"\r{self.sym.split('/')[0]} {status_str(self.status)}] PNL: {profit} ({pnlstr(round(curr_pnl, 1))})\t", end="")
+                self.pre_pnls.append(curr_pnl)
+                print(f"\r{iter} {self.sym.split('/')[0]} {status_str(self.status)}] PNL: {profit} ({pnlstr(round(curr_pnl, 1))})\t", end="")
 
-                if self.whether_filled() == True:
-                    print("\n!!! Limit Market Filled")
-                    balance = self.binance.fetch_balance()
-                    log_wallet_history(balance)
-                    return self.sym  # finish the iteration
-            #     if not self.status:
-            #         self.missed_timing += 1
-
-            # else :
-            #     # 시간이 오래 지날수록 욕심을 버리기
-            #     if (iter)%((3600/2)/self.time_interval) == 0 and iter > 0: # 3600 == 1h
-            #         loss_count = np.sum(np.where(np.array(self.pre_pnls) < 0, 1, 0))
-            #         loss_ratio = loss_count/len(self.pre_pnls)  # 값이 크면 계속 잃었던 것
-            #         self.satisfying_profit *= 0.8
-            #         self.satisfying_profit = round(max(self.satisfying_profit, self.min_profit), 2)
-
-            #     m4_shape = m4_turn(ms[3])
-
-            #     # curr pnl을 return하는건 그냥임
-            #     close_position, curr_pnl = timing_to_close(binance=self.binance, sym=self.sym, status=self.status, 
-            #             m4_shape=m4_shape, ms=ms, satisfying_price=self.satisfying_profit, 
-            #             max_loss=self.max_loss, min_profit=self.min_profit, buying_cond=self.buying_cond, howmuchtime=iter,
-            #             tf=self.tf, limit=self.limit, wins=self.wins)
-            #     self.pre_pnls.append(curr_pnl)
-
-            #     # h = int(round(3600/self.time_interval))
-            #     # if time.time() - pnl_lastupdate > 0.1*h and len(self.pre_pnls) > 2*h:
-            #     #     if curr_pnl < self.anx_pnl and curr_pnl > self.max_loss:
-            #     #         self.satisfying_profit = 0.9*np.max(self.pre_pnls[-2*h:]) # 두시간
-            #     #         pnl_lastupdate = time.time()
-
-            #     #     if (curr_pnl > self.pre_pnls[-int(0.2*h)]) and curr_pnl > 0:
-            #     #         earning_60s =  curr_pnl - self.pre_pnls[-h]
-
-            #     #         if time.time() - pnl_lastupdate < 0.5*h and self.satisfying_profit - curr_pnl > 4:
-            #     #             # 30분이내 전에 업데이트 했는데 아직 satisfying_pnl까지 4 이상 차이가 나면 걍 냅두기
-            #     #             pass
-            #     #         else:
-            #     #             if earning_60s > 3:
-            #     #                 self.satisfying_profit += 3
-            #     #                 print(f"curr_pnl: {pnlstr(curr_pnl)}    satisfying_pnl: {pnlstr(self.satisfying_profit)}")
-
-            #     #             elif earning_60s > 6 and self.satisfying_profit < 50:
-            #     #                 self.satisfying_profit += earning_60s
-            #     #                 print(f"curr_pnl: {pnlstr(curr_pnl)}    satisfying_pnl: {pnlstr(self.satisfying_profit)}")
-                                
-            #     #             elif earning_60s > 10:
-            #     #                 self.satisfying_profit += earning_60s
-            #     #                 print(f"curr_pnl: {pnlstr(curr_pnl)}    satisfying_pnl: {pnlstr(self.satisfying_profit)}")
-            #     #             pnl_lastupdate = time.time()
-
-            #     if close_position:
-            #         try:
-            #             if self.status == LONG:
-            #                 self.e_short_limit(close=True)
-            #                 pop_from_existing_positions(LONG)
-            #             else:
-            #                 self.e_long_limit(close=True)
-            #                 pop_from_existing_positions(SHORT)
-                
-            #             #
-            #             while 1:
-            #                 time.sleep(self.time_interval)
-            #                 if self.whether_filled() == True:
-            #                     print("Limit Market Filled")
-            #                     return self.sym  # finish the iteration
-
-            #         except Exception as error:
-            #             print(error)
-                
+                # 6시간 지나도 팔릴 가망이 없을 때
+                _6h = 6*60/self.time_interval
+                if curr_pnl < -self.anx_pnl and len(self.pre_pnls) > _6h and time.time() - pnl_lastupdate > 60*30:
+                    new_order_price = np.max(self.pre_pnls[-_6h:])
+                    close_func(price=new_order_price)
+                    pnl_lastupdate = time.time()
 
 
-            # time.sleep(self.time_interval)
-            # iter += 1
+            print("\n!!! Limit Market Filled")
+            balance = self.binance.fetch_balance()
+            log_wallet_history(balance)
+            return self.sym  # finish the iteration
