@@ -66,7 +66,7 @@ class Trader():
                 if amt == 0:
                     self.status = None
                     return 0
-                pnl, profit = get_curr_pnl(self.binance, self.sym.replace("/", ""))
+                pnl, profit= get_curr_pnl(self.binance, self.sym.replace("/", ""))
                 if init:
                     self.init_ckpt(position, pnl)
                     self.set_lev = False
@@ -122,7 +122,7 @@ class Trader():
 
     def close_short_limit(self, price, close=False):  # 숏산거 팔때
         self.binance.load_markets()
-        price = price * (1 - self.ratio)
+        price = price * (1 - self.p)
         order = self.binance.create_limit_buy_order(
             symbol=self.sym,
             amount=np.abs(self.amount),
@@ -132,7 +132,7 @@ class Trader():
         
     def close_long_limit(self, price, close=False):  # 롱산거 팔때
         self.binance.load_markets()
-        price = price * (1 + self.ratio)
+        price = price * (1 + self.p)
         order = self.binance.create_limit_sell_order(
             symbol=self.sym,
             amount=np.abs(self.amount),
@@ -155,10 +155,9 @@ class Trader():
         return False
 
     def run(self):
-        self.inquire_curr_price()
         iter = 0
         self.anxious = 1
-        self.pre_pnls = []
+        pre_pnls, pre_prices = [], []
         self.missed_timing = 0
         pnl_lastupdate = 0
         while 1:
@@ -208,13 +207,15 @@ class Trader():
                 time.sleep(self.time_interval)
                 
                 curr_pnl, profit = get_curr_pnl(self.binance, self.sym.replace("/", ""))
-                self.pre_pnls.append(curr_pnl)
+                price = self.inquire_curr_price()
+                pre_pnls.append(curr_pnl)
+                pre_prices.append(price)
                 print(f"\r{iter} {self.sym.split('/')[0]} {status_str(self.status)}] PNL: {profit} ({pnlstr(round(curr_pnl, 1))})\t", end="")
 
                 # 6시간 지나도 팔릴 가망이 없을 때
-                _6h = 6*60/self.time_interval
-                if curr_pnl < -self.anx_pnl and len(self.pre_pnls) > _6h and time.time() - pnl_lastupdate > 60*30:
-                    new_order_price = np.max(self.pre_pnls[-_6h:])
+                _6h = int(round(6*3600/self.time_interval))
+                if curr_pnl < -self.anx_pnl and len(pre_pnls) > _6h and time.time() - pnl_lastupdate > 60*30:
+                    new_order_price = np.max(pre_prices[-_6h:])
                     close_func(price=new_order_price)
                     pnl_lastupdate = time.time()
 

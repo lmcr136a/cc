@@ -113,14 +113,14 @@ def timing_to_position(binance, ms, sym, tf, pr=True):
             return short_cond(m1, tf_=tf_)
         
 def long_cond(m1, cond=0.8, hour=2, tf_=3):
-    t = hour*60/tf_
+    t = int(round(hour*60/tf_))
     m1 = m1[-t:]
     m1 = minmax(m1)
     if m1[-1] < cond:  # 너무 높을때 long사는거 지양
         return LONG
         
 def short_cond(m1, cond=0.8, hour=2, tf_=3):
-    t = hour*60/tf_
+    t = int(round(hour*60/tf_))
     m1 = m1[-t:]
     m1 = minmax(m1)
     if m1[-1] > -cond:  # 너무 낮을때 short사는거 지양
