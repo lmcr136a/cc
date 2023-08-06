@@ -37,10 +37,10 @@ def curr_states_other_minions():
         elif pos == SHORT:
             n2 += 1
     short_only_strong, long_only_strong = False, False
-    if n1 > 7:
+    if n1 >= 6:
         short_only_strong = True
         # print("Short Only..")
-    if n2 > 7:
+    if n2 >= 6:
         long_only_strong = True
         # print("Long Only...")
     return short_only_strong, long_only_strong, befores
