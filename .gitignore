@@ -3,3 +3,4 @@ __pycache__/*.pyc
 deep/__pycache__/*.pyc
 deep/*.mat
 *.mat
+wallet_*
