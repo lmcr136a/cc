@@ -15,7 +15,7 @@ from get_model import get_model_prediction
 # init(convert=True)
 
 def cal_compound_amt(wallet_usdt, lev, price, symnum):
-    return np.float(wallet_usdt*lev/float(price)*0.9/float(symnum))
+    return float(wallet_usdt*lev/float(price)*0.9/float(symnum))
 
 """
 죽 돌면서 봤는데 다 겁나 상승 or 하강만 하느라 지그재그가 없음 => 90%이상 [[00001111], [11110000]] 페어
@@ -196,12 +196,13 @@ def whether_calm(m1, ref=0.05, n=80):
         return False
     
 def get_curr_pnl(binance, sym):
-    try:
-        wallet = binance.fetch_balance(params={"type": "future"})
-    except Exception as E:
-        print(E)
-        time.sleep(3)
-        wallet = binance.fetch_balance(params={"type": "future"})
+    while True:
+        try:
+            wallet = binance.fetch_balance(params={"type": "future"})
+        except Exception as E:
+            print(E)
+            time.sleep(3)
+            wallet = binance.fetch_balance(params={"type": "future"})
     
     positions = wallet['info']['positions']
     for pos in positions:
@@ -348,7 +349,7 @@ def m4_turn(m4, ref=0.005):
 
 
 def get_binance():
-    with open("a.txt") as f:
+    with open("hyoungjoon.txt") as f:
         lines = f.readlines()
         api_key = lines[0].strip()
         secret  = lines[1].strip()
