@@ -3,8 +3,10 @@ import numpy as np
 import time
 import utils
 from utils import *
-
+import algs
 importlib.reload(utils)  #> TODO: 에러많이남   
+importlib.reload(algs)  #> TODO: 에러많이남   
+from algs import select_sym, timing_to_position
 
 class Trader():
     def __init__(self, symbol=None, symnum=1) -> None:
@@ -40,7 +42,7 @@ class Trader():
 
     def update_wallet(self, balance=None):
         if not balance:
-            balance = self.binance.fetch_balance()
+            balance = get_balance(self.binance)
         # USDT
         for asset in balance['info']['assets']:
             if asset['asset'] == 'USDT':
@@ -48,7 +50,7 @@ class Trader():
 
     ## 현재 정보 조회
     def inquire_curr_info(self, init=False):
-        balance = self.binance.fetch_balance()
+        balance = get_balance(self.binance)
         positions = balance['info']['positions']
         
         log_wallet_history(balance)
@@ -155,7 +157,7 @@ class Trader():
         )
 
     def order_filled(self):
-        balance = self.binance.fetch_balance()
+        balance = get_balance(self.binance)
         positions = balance['info']['positions']
 
         for position in positions:
@@ -189,16 +191,12 @@ class Trader():
                     if self.status == LONG:
                         price = self.e_long_market()
                         time.sleep(0.1)
-                        # add_to_existing_positions(LONG)
                         close_func = self.close_long_limit
-                        # pop_from_existing_positions(LONG)
 
                     elif self.status == SHORT:
                         price =self.e_short_market()
                         time.sleep(0.1)
-                        # add_to_existing_positions(SHORT)
                         close_func = self.close_short_limit
-                        # pop_from_existing_positions(SHORT)
                     close_func(price=price, close=True)
             
                 except Exception as error:
@@ -208,7 +206,6 @@ class Trader():
                         self.lev = round(0.5*self.lev)
                     else:
                         exit()
-                add_to_existing_positions(self.status)
             else:
                 # checkpoint일때
                 if self.status == LONG:
@@ -237,8 +234,7 @@ class Trader():
                     close_func(price=new_order_price)
                     pnl_lastupdate = time.time()
 
-            pop_from_existing_positions(self.status)
             print("\n!!! Limit Market Filled")
-            balance = self.binance.fetch_balance()
+            balance = get_balance(self.binance)
             log_wallet_history(balance)
             return self.sym  # finish the iteration
