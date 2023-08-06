@@ -37,10 +37,10 @@ def curr_states_other_minions():
         elif pos == SHORT:
             n2 += 1
     short_only_strong, long_only_strong = False, False
-    if n1 > 3:
+    if n1 > 7:
         short_only_strong = True
         # print("Short Only..")
-    if n2 > 3:
+    if n2 > 7:
         long_only_strong = True
         # print("Long Only...")
     return short_only_strong, long_only_strong, befores
@@ -60,20 +60,18 @@ def select_sym(binance, tf, limit, wins, symnum):
             timing = False
             
             if timing_pos:
-                # if (short_only_strong and timing_pos == LONG) or (long_only_strong and timing_pos == SHORT):
-                #     continue
+                if (short_only_strong and timing_pos == LONG) or (long_only_strong and timing_pos == SHORT):
+                    continue
                 timing = True
 
             if timing:
-                print(sym, "Timing")
-
                 balance = binance.fetch_balance()
                 positions = balance['info']['positions']
                 for position in positions:
                     if position["symbol"] == sym.replace("/", ""):
                         amt = float(position['positionAmt'])
                         if amt == 0 and sym not in befores and sym.split("/")[0] not in ["MKR", "USDC", "ETC", "BNB", "BTC", "ETH", "BCH", "DASH", "XMR", "QNT", "LTC"]:
-                            print(f"S{sym} OOOOO")
+                            print(f"{sym} OOOOO")
                             return sym
             else:
                 time.sleep(0.3*symnum)
@@ -99,8 +97,8 @@ def timing_to_position(binance, ms, sym, tf, pr=True):
     if curr_mvmt == FALLING:
         if pr:
             print(f"[{sym[:-5]} CASE1] curr_mvmt:{curr_mvmt} {small_shape}")
-        if small_shape == INCREASING_CONCAVE: 
-            return long_cond(m1, tf_=tf_)
+        # if small_shape == INCREASING_CONCAVE: 
+        #     return long_cond(m1, tf_=tf_)
         if small_shape == DECREASING_CONVEX:
             return short_cond(m1, tf_=tf_)
         
@@ -109,22 +107,24 @@ def timing_to_position(binance, ms, sym, tf, pr=True):
             print(f"[{sym[:-5]} CASE2] curr_mvmt:{curr_mvmt} {small_shape}")
         if small_shape == INCREASING_CONCAVE:  
             return long_cond(m1, tf_=tf_)
-        if small_shape == DECREASING_CONVEX:
-            return short_cond(m1, tf_=tf_)
+        # if small_shape == DECREASING_CONVEX:
+        #     return short_cond(m1, tf_=tf_)
         
-def long_cond(m1, cond=0.8, hour=2, tf_=3):
+def long_cond(m1, cond=0.5, hour=3, tf_=3):
     t = int(round(hour*60/tf_))
     m1 = m1[-t:]
     m1 = minmax(m1)
     if m1[-1] < cond:  # 너무 높을때 long사는거 지양
+        print(m1[-1], cond)
         return LONG
         
-def short_cond(m1, cond=0.8, hour=2, tf_=3):
+def short_cond(m1, cond=0.5, hour=3, tf_=3):
     t = int(round(hour*60/tf_))
     m1 = m1[-t:]
     m1 = minmax(m1)
     if m1[-1] > -cond:  # 너무 낮을때 short사는거 지양
-        return LONG
+        print(m1[-1], -cond)
+        return SHORT
     
 
 def shape_info(m, n=4):

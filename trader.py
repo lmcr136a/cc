@@ -4,6 +4,7 @@ import time
 import utils
 from utils import *
 
+importlib.reload(utils)  #> TODO: 에러많이남   
 
 class Trader():
     def __init__(self, symbol=None, symnum=1) -> None:
@@ -18,7 +19,7 @@ class Trader():
 
         #########################################
         self.anx_pnl = -40
-        self.p = 6 *0.01/self.lev
+        self.p = 8 *0.01/self.lev
         #########################################
 
         if not symbol:
@@ -68,6 +69,11 @@ class Trader():
                     return 0
                 pnl, profit= get_curr_pnl(self.binance, self.sym.replace("/", ""))
                 if init:
+                    open_orders = self.binance.fetch_open_orders(
+                        symbol=self.sym
+                    )
+                    for open_order in open_orders:
+                        self.order_id = open_order['id']
                     self.init_ckpt(position, pnl)
                     self.set_lev = False
                     return None
@@ -128,6 +134,7 @@ class Trader():
             amount=np.abs(self.amount),
             price= price,
             )
+        self.order_id = order['id']
 
         
     def close_long_limit(self, price, close=False):  # 롱산거 팔때
@@ -138,7 +145,14 @@ class Trader():
             amount=np.abs(self.amount),
             price= price,
             )
+        self.order_id = order['id']
 
+
+    def cancle_order(self,):
+        order = self.binance.cancel_order(
+            symbol=self.sym,
+            id=self.order_id
+        )
 
     def order_filled(self):
         balance = self.binance.fetch_balance()
@@ -161,7 +175,6 @@ class Trader():
         self.missed_timing = 0
         pnl_lastupdate = 0
         while 1:
-            # importlib.reload(utils)  > TODO: 에러많이남
             ms = get_ms(self.binance, self.sym, self.tf, self.limit, self.wins)
             
             if self.missed_timing > 3:
@@ -170,6 +183,7 @@ class Trader():
             if not self.status:
             
                 self.status = timing_to_position(self.binance, ms, self.sym, self.tf, pr=True)
+                print(self.status)
 
                 try:
                     if self.status == LONG:
@@ -194,6 +208,7 @@ class Trader():
                         self.lev = round(0.5*self.lev)
                     else:
                         exit()
+                add_to_existing_positions(self.status)
             else:
                 # checkpoint일때
                 if self.status == LONG:
@@ -213,13 +228,16 @@ class Trader():
                 print(f"\r{iter} {self.sym.split('/')[0]} {status_str(self.status)}] PNL: {profit} ({pnlstr(round(curr_pnl, 1))})\t", end="")
 
                 # 6시간 지나도 팔릴 가망이 없을 때
+
+                # TODO: 가망이 생기면 원래대로 되돌려놔야해
                 _6h = int(round(6*3600/self.time_interval))
                 if curr_pnl < -self.anx_pnl and len(pre_pnls) > _6h and time.time() - pnl_lastupdate > 60*30:
-                    new_order_price = np.max(pre_prices[-_6h:])
+                    new_order_price = pre_prices[np.argmax(pre_pnls[-_6h:])]
+                    self.cancle_order()
                     close_func(price=new_order_price)
                     pnl_lastupdate = time.time()
 
-
+            pop_from_existing_positions(self.status)
             print("\n!!! Limit Market Filled")
             balance = self.binance.fetch_balance()
             log_wallet_history(balance)
