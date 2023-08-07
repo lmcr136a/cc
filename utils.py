@@ -13,13 +13,15 @@ from HYPERPARAMETERS import *
 # init(convert=True)
 
 def cal_compound_amt(wallet_usdt, lev, price, symnum):
-    
-    k = np.random.randint(low=12, high=20, size=1)
+    if symnum == 1:
+        k = np.random.randint(low=12, high=20, size=1)
+    else:
+        k = np.random.randint(low=18, high=20, size=1)
     k = k/20   # 0.6 ~ 0.95
     return np.float(wallet_usdt*lev/float(price)*k/float(symnum))
 
 
-def curr_states_other_minions(binance, ref_num=6):
+def curr_states_other_minions(binance, ref_num=7):
     balance = get_balance(binance)
     positions = balance['info']['positions']
     
@@ -33,10 +35,11 @@ def curr_states_other_minions(binance, ref_num=6):
     short_only_strong, long_only_strong = False, False
     if n1 >= ref_num:
         short_only_strong = True
-        # print("Short Only..")
+        print(f"\rShort Only |", end="")
+
     if n2 >= ref_num:
         long_only_strong = True
-        # print("Long Only...")
+        print(f"\rLong Only |", end="")
         
     with open("files/before_sym.txt", 'r') as f:
         befores = f.read()
@@ -44,22 +47,30 @@ def curr_states_other_minions(binance, ref_num=6):
     return short_only_strong, long_only_strong, befores
 
 
-def long_cond(m1, cond=0.5, hour=3, tf_=3):
-    t = int(round(hour*60/tf_))
-    m1 = m1[-t:]
-    m1 = minmax(m1)
-    if m1[-1] < cond:  # 너무 높을때 long사는거 지양
-        print(m1[-1], cond)
-        return LONG
+def long_cond(m1, cond1=0.7, cond2=0.4, hour=6, tf_=3):
+    t1 = int(round(hour*60/tf_))
+    t2 = int(round(60/tf_))
+    m1 = m1[-t1:]
+    mm1 = minmax(m1)
+    mm2 = minmax(m1[-t2:])
+    print(f"{mm2[-1]} < {cond2} & {mm1[-1]} < {cond1}")
+    if mm1[-1] < cond1:  # 너무 높을때 long사는거 지양
+        mm2 = minmax(m1[-t2:])
+        if mm2[-1] < cond2:
+            print(f"{mm2[-1]} < {cond2} & {mm1[-1]} < {cond1}")
+            return LONG
         
-def short_cond(m1, cond=0.5, hour=3, tf_=3):
-    t = int(round(hour*60/tf_))
-    m1 = m1[-t:]
-    m1 = minmax(m1)
-    if m1[-1] > -cond:  # 너무 낮을때 short사는거 지양
-        print(m1[-1], -cond)
-        return SHORT
-    
+def short_cond(m1, cond1=0.7, cond2=0.4, hour=6, tf_=3):
+    t1 = int(round(hour*60/tf_))
+    t2 = int(round(60/tf_))
+    m1 = m1[-t1:]
+    mm1 = minmax(m1)
+    if mm1[-1] > -cond1:  # 너무 낮을때 short 지양
+        mm2 = minmax(m1[-t2:])
+        if mm2[-1] > -cond2:
+            print(f"{mm2[-1]} > {-cond2} & {mm1[-1]} > {-cond1}")
+            return SHORT
+        
 
 def shape_info(m, n=4):
     # return 오목/볼록, 증가/감소

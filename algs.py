@@ -7,7 +7,11 @@ import matplotlib.pyplot as plt
 from bull_bear import *
 from datetime import datetime
 from HYPERPARAMETERS import *
-
+# import importlib
+# import utils
+from utils import *
+from utils import _y
+# importlib.reload(utils)  #> TODO: 에러많이남   
 
 
 def select_sym(binance, tf, limit, wins, symnum):
@@ -25,6 +29,7 @@ def select_sym(binance, tf, limit, wins, symnum):
             
             if timing_pos:
                 if (short_only_strong and timing_pos == LONG) or (long_only_strong and timing_pos == SHORT):
+                    print(short_only_strong, long_only_strong, timing_pos)
                     continue
                 timing = True
 
@@ -42,7 +47,7 @@ def select_sym(binance, tf, limit, wins, symnum):
 
                 
 
-def timing_to_position(binance, ms, sym, tf, pr=True):
+def timing_to_position(binance, ms, sym, tf, cond=0.6, pr=True):
     tf_ = int(tf.replace("m", ""))
     m1, m2, m3 , m4 = ms
 
@@ -56,21 +61,31 @@ def timing_to_position(binance, ms, sym, tf, pr=True):
     """
     그래프의 위치, 장의 흐름, 지금 당장의 움직임, 큰 흐름(m4)
     """
-    if curr_mvmt == FALLING:
+    # if curr_mvmt == FALLING:
+    #     if pr:
+    #         print(f"[{sym[:-5]} CASE1] curr_mvmt:{curr_mvmt} {small_shape}")
+    #     if small_shape == INCREASING_CONCAVE: 
+    #         return long_cond(m1, cond=cond, tf_=tf_)
+    #     elif small_shape == DECREASING_CONVEX:
+    #         return short_cond(m1, cond=cond, tf_=tf_)
+        
+    # elif curr_mvmt == RISING:
+    #     if pr:
+    #         print(f"[{sym[:-5]} CASE2] curr_mvmt:{curr_mvmt} {small_shape}")
+    #     if small_shape == INCREASING_CONCAVE:  
+    #         return long_cond(m1, cond=cond, tf_=tf_)
+    #     elif small_shape == DECREASING_CONVEX:
+    #         return short_cond(m1, cond=cond, tf_=tf_)
+        
+    if small_shape == INCREASING_CONCAVE: 
         if pr:
             print(f"[{sym[:-5]} CASE1] curr_mvmt:{curr_mvmt} {small_shape}")
-        # if small_shape == INCREASING_CONCAVE: 
-        #     return long_cond(m1, tf_=tf_)
-        if small_shape == DECREASING_CONVEX:
-            return short_cond(m1, tf_=tf_)
+        return long_cond(m1, tf_=tf_)
         
-    elif curr_mvmt == RISING:
+    elif small_shape == DECREASING_CONVEX:
         if pr:
             print(f"[{sym[:-5]} CASE2] curr_mvmt:{curr_mvmt} {small_shape}")
-        if small_shape == INCREASING_CONCAVE:  
-            return long_cond(m1, tf_=tf_)
-        # if small_shape == DECREASING_CONVEX:
-        #     return short_cond(m1, tf_=tf_)
+        return short_cond(m1, tf_=tf_)
         
 
 

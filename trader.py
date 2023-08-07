@@ -1,16 +1,15 @@
 import importlib
 import numpy as np
 import time
-import utils
-from utils import *
 import algs
-importlib.reload(utils)  #> TODO: 에러많이남   
-importlib.reload(algs)  #> TODO: 에러많이남   
 from algs import select_sym, timing_to_position
+from utils import *
+# importlib.reload(algs)  #> TODO: 에러많이남   
 
 class Trader():
     def __init__(self, symbol=None, symnum=1) -> None:
         self.binance = get_binance()
+        
         self.symnum = float(symnum)
         self.other_running_sym_num = 0
         self.tf = '3m'
@@ -21,7 +20,7 @@ class Trader():
 
         #########################################
         self.anx_pnl = -40
-        self.p = 8 *0.01/self.lev
+        self.p = 10 *0.01/self.lev
         #########################################
 
         if not symbol:
@@ -48,7 +47,6 @@ class Trader():
             if asset['asset'] == 'USDT':
                 self.wallet_usdt = float(asset['availableBalance'])
 
-    ## 현재 정보 조회
     def inquire_curr_info(self, init=False):
         balance = get_balance(self.binance)
         positions = balance['info']['positions']
@@ -68,6 +66,8 @@ class Trader():
                 amt = float(position['positionAmt'])
                 if amt == 0:
                     self.status = None
+                    self.binance.set_margin_mode(symbol=self.sym, marginMode ='ISOLATED')
+                    self.binance.set_leverage(symbol=self.sym, leverage=self.lev)
                     return 0
                 pnl, profit= get_curr_pnl(self.binance, self.sym.replace("/", ""))
                 if init:
@@ -80,7 +80,6 @@ class Trader():
                     self.set_lev = False
                     return None
 
-
     def init_ckpt(self, position, pnl):
         amt = float(position['positionAmt'])
         self.lev = float(position['leverage'])
@@ -91,7 +90,6 @@ class Trader():
             self.status = LONG
         print(f"{self.sym} {self.status} Current PNL:", pnl, "% Leverage: ", self.lev, ' Amt: ', amt)
         
-
     def inquire_curr_price(self):
         info = self.binance.fetch_ticker(self.sym)
         return info['last']
@@ -99,12 +97,6 @@ class Trader():
     def e_long_market(self, close=False):  # 오를것이다
         self.binance.load_markets()
         price = self.inquire_curr_price()
-        market = self.binance.markets[self.sym]
-        if self.set_lev:
-            resp = self.binance.set_leverage(
-                symbol=market['id'],
-                leverage=self.lev,
-            )
         order = self.binance.create_market_buy_order(
             symbol=self.sym,
             amount=np.abs(self.amount),
@@ -115,12 +107,6 @@ class Trader():
     def e_short_market(self, close=False):  # 내릴것이다
         self.binance.load_markets()
         price = self.inquire_curr_price()
-        market = self.binance.markets[self.sym]
-        if self.set_lev:
-            resp = self.binance.set_leverage(
-                symbol=market['id'],
-                leverage=self.lev,
-            )
         order = self.binance.create_market_sell_order(
             symbol=self.sym,
             amount=np.abs(self.amount),
@@ -128,27 +114,27 @@ class Trader():
         self.order_id = order['id']
         return price
 
-    def close_short_limit(self, price, close=False):  # 숏산거 팔때
+    def close_short_limit(self, curr_price, close=False):  # 숏산거 팔때
         self.binance.load_markets()
-        price = price * (1 - self.p)
+        price = curr_price * (1 - self.p)
         order = self.binance.create_limit_buy_order(
             symbol=self.sym,
             amount=np.abs(self.amount),
             price= price,
             )
         self.order_id = order['id']
-
+        print(f"Submitted Order|{curr_price}->{price} p={self.p*self.lev*100}")
         
-    def close_long_limit(self, price, close=False):  # 롱산거 팔때
+    def close_long_limit(self, curr_price, close=False):  # 롱산거 팔때
         self.binance.load_markets()
-        price = price * (1 + self.p)
+        price = curr_price * (1 + self.p)
         order = self.binance.create_limit_sell_order(
             symbol=self.sym,
             amount=np.abs(self.amount),
             price= price,
             )
         self.order_id = order['id']
-
+        print(f"Submitted Order|{curr_price}->{price} p={self.p*self.lev*100}")
 
     def cancle_order(self,):
         order = self.binance.cancel_order(
@@ -197,7 +183,7 @@ class Trader():
                         price =self.e_short_market()
                         time.sleep(0.1)
                         close_func = self.close_short_limit
-                    close_func(price=price, close=True)
+                    close_func(price, close=True)
             
                 except Exception as error:
                     print(error)
@@ -226,13 +212,13 @@ class Trader():
 
                 # 6시간 지나도 팔릴 가망이 없을 때
 
-                # TODO: 가망이 생기면 원래대로 되돌려놔야해
-                _6h = int(round(6*3600/self.time_interval))
-                if curr_pnl < -self.anx_pnl and len(pre_pnls) > _6h and time.time() - pnl_lastupdate > 60*30:
-                    new_order_price = pre_prices[np.argmax(pre_pnls[-_6h:])]
-                    self.cancle_order()
-                    close_func(price=new_order_price)
-                    pnl_lastupdate = time.time()
+                # # TODO: 가망이 생기면 원래대로 되돌려놔야해
+                # _6h = int(round(6*3600/self.time_interval))
+                # if curr_pnl < -self.anx_pnl and len(pre_pnls) > _6h and time.time() - pnl_lastupdate > 60*30:
+                #     new_order_price = pre_prices[np.argmax(pre_pnls[-_6h:])]
+                #     self.cancle_order()
+                #     close_func(new_order_price)
+                #     pnl_lastupdate = time.time()
 
             print("\n!!! Limit Market Filled")
             balance = get_balance(self.binance)
