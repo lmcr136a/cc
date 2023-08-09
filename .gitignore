@@ -4,3 +4,4 @@ deep/__pycache__/*.pyc
 deep/*.mat
 *.mat
 wallet_*
+keys/

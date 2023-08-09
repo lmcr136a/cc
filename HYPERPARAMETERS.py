@@ -8,7 +8,7 @@ INCREASING_CONCAVE = 'Increasing and Concave'
 
 CALM = 0.07 # 20배일때 1%
 
-with open("symlist.txt", 'r') as f:
+with open("files/symlist.txt", 'r') as f:
     SYMLIST = eval(f.read())
 
 COND_LV1, COND_LV2 = 0.25, 0.15
