@@ -121,7 +121,7 @@ def get_ms(binance, sym, tf, limit, wins):
         m3 = df['close'].rolling(window=wins[2]).mean()
         m4 = df['close'].rolling(window=wins[3]).mean()
     except Exception as e:
-        print(e)
+        print("Error in get_ms:\n",e)
         m1, m2, m3, m4 = get_ms(binance, sym, tf, limit, wins)
 
     return m1, m2, m3, m4
@@ -177,7 +177,7 @@ def get_balance(binance):
     try: 
         wallet = binance.fetch_balance(params={"type": "future"})
     except Exception as E:
-        print(E)
+        print("Error in get_balance:\n", E)
         time.sleep(3)
         wallet = get_balance(binance)
     return wallet

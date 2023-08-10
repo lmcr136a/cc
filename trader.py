@@ -20,7 +20,7 @@ class Trader():
 
         #########################################
         self.anx_pnl = -40
-        self.p = 10 *0.01/self.lev
+        self.p = 7 *0.01/self.lev
         #########################################
 
         if not symbol:
@@ -91,8 +91,12 @@ class Trader():
         print(f"{self.sym} {self.status} Current PNL:", pnl, "% Leverage: ", self.lev, ' Amt: ', amt)
         
     def inquire_curr_price(self):
-        info = self.binance.fetch_ticker(self.sym)
-        return info['last']
+        try:
+            info = self.binance.fetch_ticker(self.sym)['last']
+        except Exception as E:
+            print(E)
+            info = self.inquire_curr_price()
+        return info
 
     def e_long_market(self, close=False):  # 오를것이다
         self.binance.load_markets()
