@@ -121,7 +121,7 @@ def get_ms(binance, sym, tf, limit, wins):
         m3 = df['close'].rolling(window=wins[2]).mean()
         m4 = df['close'].rolling(window=wins[3]).mean()
     except Exception as e:
-        print(e)
+        print("Error in get_ms:\n",e)
         m1, m2, m3, m4 = get_ms(binance, sym, tf, limit, wins)
 
     return m1, m2, m3, m4
@@ -177,7 +177,7 @@ def get_balance(binance):
     try: 
         wallet = binance.fetch_balance(params={"type": "future"})
     except Exception as E:
-        print(E)
+        print("Error in get_balance:\n", E)
         time.sleep(3)
         wallet = get_balance(binance)
     return wallet
@@ -199,27 +199,19 @@ def get_binance():
     })
     return binance
 ###########################################################################
-def detect_sudden(self,m1, status, ref=0.085):
+def detect_sudden(m1, status, ref=0.085):
         
         now = m1[-1]
-        prev1 = m1[-2]
-        prev2 = m1[-3]
-        
-        percent_change_prev1 = ((now - prev1) / prev1) * 100
-        percent_change_prev2 = ((now - prev2) / prev2) * 100
+        prev = m1[-3:-1]
+        for i in range(len(prev)):
+            p_change = ((now - int(prev[i])) / int(prev[i])) * 100
 
-        if status == LONG and percent_change_prev1 > self.ref and percent_change_prev2 > self.ref:
-            result = True
-        elif status == SHORT and percent_change_prev1 < -self.ref and percent_change_prev2 < -self.ref:
-            result = True
+        if status == LONG and np.all(p_change)> ref:
+            return True
+        elif status == SHORT and np.all(p_change) < -ref:
+            return True
         else:
-            result = False
-        
-        if self.previous_result is not None and result == self.previous_result:
-            return result, True
-        else:
-            self.previous_result = result
-            return result, False
+            return False   
 ###########################################################################
 # 예쁜 print를 위해
 def _b(str):

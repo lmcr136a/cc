@@ -5,3 +5,4 @@ deep/*.mat
 *.mat
 wallet_*
 keys/
+wallet_log.png
