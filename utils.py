@@ -18,7 +18,7 @@ def cal_compound_amt(wallet_usdt, lev, price, symnum):
     else:
         k = np.random.randint(low=18, high=20, size=1)
     k = k/20   # 0.6 ~ 0.95
-    return np.float(wallet_usdt*lev/float(price)*k/float(symnum))
+    return np.float64(wallet_usdt*lev/float(price)*k/float(symnum))
 
 
 def curr_states_other_minions(binance, ref_num=7):
@@ -184,7 +184,7 @@ def get_balance(binance):
 
 
 def get_binance():
-    with open("keys/a.txt") as f:
+    with open("keys/hyoungjoon.txt") as f:
         lines = f.readlines()
         api_key = lines[0].strip()
         secret  = lines[1].strip()
@@ -198,7 +198,21 @@ def get_binance():
         }
     })
     return binance
+###########################################################################
+def detect_sudden(m1, status, ref=0.085):
+        
+        now = m1[-1]
+        prev = m1[-3:-1]
+        for i in range(len(prev)):
+            p_change = ((now - int(prev[i])) / int(prev[i])) * 100
 
+        if status == LONG and np.all(p_change)> ref:
+            return True
+        elif status == SHORT and np.all(p_change) < -ref:
+            return True
+        else:
+            return False   
+###########################################################################
 # 예쁜 print를 위해
 def _b(str):
     return f"{Fore.BLUE}{str}{Style.RESET_ALL}"

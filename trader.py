@@ -118,9 +118,9 @@ class Trader():
         self.order_id = order['id']
         return price
 
-    def close_short_limit(self, curr_price, close=False):  # 숏산거 팔때
+    def close_short_limit(self, curr_price, close=False, sf = 1):  # 숏산거 팔때
         self.binance.load_markets()
-        price = curr_price * (1 - self.p)
+        price = curr_price * (1 - (self.p * sf))
         order = self.binance.create_limit_buy_order(
             symbol=self.sym,
             amount=np.abs(self.amount),
@@ -129,9 +129,9 @@ class Trader():
         self.order_id = order['id']
         print(f"Submitted Order|{curr_price}->{price} p={self.p*self.lev*100}")
         
-    def close_long_limit(self, curr_price, close=False):  # 롱산거 팔때
+    def close_long_limit(self, curr_price, close=False, sf = 1):  # 롱산거 팔때
         self.binance.load_markets()
-        price = curr_price * (1 + self.p)
+        price = curr_price * (1 + (self.p * sf))
         order = self.binance.create_limit_sell_order(
             symbol=self.sym,
             amount=np.abs(self.amount),
@@ -200,12 +200,13 @@ class Trader():
                 # checkpoint일때
                 if self.status == LONG:
                     close_func = self.close_long_limit
+
                 elif self.status == SHORT:
                     close_func = self.close_short_limit
 
 
             while not self.order_filled():
-                iter += 1
+                iter += 1   
                 time.sleep(self.time_interval)
                 
                 curr_pnl, profit = get_curr_pnl(self.binance, self.sym.replace("/", ""))
@@ -223,7 +224,17 @@ class Trader():
                 #     self.cancle_order()
                 #     close_func(new_order_price)
                 #     pnl_lastupdate = time.time()
-
+                ####################################################
+                sudden = detect_sudden()
+                if sudden:
+                    if self.status == LONG:
+                        self.cancle_order()
+                        close_func = self.close_long_limit(price, close=False, sf = 2)
+                    elif self.status == SHORT:
+                        self.cancle_order()
+                        close_func = self.close_short_limit(price, close=False, sf = 2)
+                    close_func()
+                ####################################################
             print("\n!!! Limit Market Filled")
             balance = get_balance(self.binance)
             log_wallet_history(balance)
