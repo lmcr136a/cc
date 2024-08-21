@@ -5,8 +5,7 @@ import utils
 from utils import *
 
 """
-30% 벌면 무조건 팔기 ( 3% 오른 것)
-30% 잃으면 무조건 팔기 ( 3% 떨어진 것)
+1.2
 """
 class Trader():
     def __init__(self, symbol=None, symnum=1) -> None:
@@ -22,8 +21,9 @@ class Trader():
         self.lev = 10
         self.wins = [1, 3, 8, 15]              # 3번째
         self.limit = self.wins[-1]*10           # for past_data
-        self.max_loss = -3*self.lev                     # 마이너스인거 확인
-        self.min_profit = 3*self.lev          # 20 일때 11%  
+        self.max_loss = -1.5*self.lev                     # 마이너스인거 확인
+        self.min_profit = 1.5*self.lev          # 20 일때 11%  
+        self.satisfying_profit = 1.5*self.lev   # 3 * 10
         self.limit_amt_ratio = 0.01*0.03
         
         if not symbol:
@@ -31,7 +31,6 @@ class Trader():
                                 self.tf, self.limit, self.wins, self.symnum)
         self.sym = symbol
 
-        self.satisfying_profit = 3*self.lev   # 3 * 10
 
         self.time_interval = 3
         self.tf_ = int(self.tf[:-1])
