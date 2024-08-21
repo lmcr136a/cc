@@ -13,8 +13,7 @@ def past_data(binance, sym, tf, limit, since=None):
     try:
         coininfo = binance.fetch_ohlcv(symbol=sym, 
             timeframe=tf, since=since, limit=limit)
-    except Exception as error:
-        print(error)
+    except:
         time.sleep(3)
         coininfo = binance.fetch_ohlcv(symbol=sym, 
             timeframe=tf, since=since, limit=limit)
@@ -46,9 +45,7 @@ def bull_or_bear(binance, sym, mode=1):
     for i in range(1, len(m)-1):
         rising.append((m[i+1] - m[i])/m[i]*100)
 
-    rising_coef = np.mean(rising)*a
     # 그 ㅈㄴ예쁘게 올라가는게 0.142, 0.00567, 0.155
-            
     rising_coef = np.mean(rising)*a
     # print(m.keys()[0], rising_coef, len(m))
     if rising_coef > 0.04:

@@ -4,10 +4,14 @@ import time
 import utils
 from utils import *
 
-
+"""
+30% 벌면 무조건 팔기 ( 3% 오른 것)
+30% 잃으면 무조건 팔기 ( 3% 떨어진 것)
+"""
 class Trader():
     def __init__(self, symbol=None, symnum=1) -> None:
         self.binance = get_binance()
+
         self.symnum = float(symnum)
         self.other_running_sym_num = 0
         self.cond1 = 0.2
@@ -15,24 +19,24 @@ class Trader():
         self.buying_cond = self.cond1
         self.order_num = 1                      # 거래 한번만
         self.tf = '3m'
-        self.lev = 20
-        self.wins = [1, 8, 15, 70]              # 3번째
+        self.lev = 10
+        self.wins = [1, 3, 8, 15]              # 3번째
         self.limit = self.wins[-1]*10           # for past_data
-        self.max_loss = -2                     # 마이너스인거 확인
-        self.anx_pnl = -4
-        self.min_profit = 0.2*self.lev          # 20 일때 11%  
+        self.max_loss = -3*self.lev                     # 마이너스인거 확인
+        self.min_profit = 3*self.lev          # 20 일때 11%  
+        self.limit_amt_ratio = 0.01*0.03
         
         if not symbol:
             symbol = select_sym(self.binance, self.buying_cond, self.pre_cond, 
                                 self.tf, self.limit, self.wins, self.symnum)
         self.sym = symbol
 
-        self.satisfying_profit = 0.2*self.lev   # 20 일때 2%
+        self.satisfying_profit = 3*self.lev   # 3 * 10
 
         self.time_interval = 3
         self.tf_ = int(self.tf[:-1])
         self.set_lev = True                     # 기존거 가져오는경우 다시 set하면 에러나기때문
-        self.binance.load_markets()
+        self.binance.fetch_markets()
         self.last_order = 0
         self.inquire_curr_info(init=True)
 
@@ -67,23 +71,21 @@ class Trader():
                 self.other_running_sym_num += 1
         self.symnum -= self.other_running_sym_num 
         print(f"other_running_sym_num: {self.other_running_sym_num}  self.symnum: {self.symnum}")
+
         for position in positions:
-            amt = float(position['positionAmt'])
+            print(position)
             if position["symbol"] == self.sym.replace("/", ""):
-                amt = float(position['positionAmt'])
-                if amt == 0:
-                    self.status = None
-                    return 0
-                pnl, profit = get_curr_pnl(self.binance, self.sym.replace("/", ""))
                 if init:
+                    pnl, profit = get_curr_pnl(self.binance, self.sym.replace("/", ""))
                     self.init_ckpt(position, pnl)
                     self.set_lev = False
-                    return None
+                    return 0
+        self.status = None
 
 
     def init_ckpt(self, position, pnl):
         amt = float(position['positionAmt'])
-        self.lev = float(position['leverage'])
+        self.lev = round(float(position['notional'])/float(position['initialMargin']))
         self.amount = amt
         if amt < 0:
             self.status = SHORT
@@ -94,35 +96,45 @@ class Trader():
 
     def inquire_curr_price(self):
         info = self.binance.fetch_ticker(self.sym)
-        return info['average']
+        return info['close']
 
     def e_long(self, close=False):  # 오를것이다
         self.binance.load_markets()
-        price = self.inquire_curr_price()
+        raw_price = self.inquire_curr_price()
+        point_len = len(str(raw_price).split(".")[-1])
+        price = round(raw_price*(1-self.limit_amt_ratio), point_len)  
+
+        print(f"Try to [{self.sym}] price:{raw_price}->{price} LONG order amt:{self.amount}")
+
         market = self.binance.markets[self.sym]
         if self.set_lev:
             resp = self.binance.set_leverage(
                 symbol=market['id'],
                 leverage=self.lev,
             )
-        order = self.binance.create_market_buy_order(
-            symbol=self.sym,
-            amount=np.abs(self.amount),
+        order = self.binance.create_order(
+            symbol=self.sym, type="limit", side="buy", amount=np.abs(self.amount), 
+            price=price, params={"marginMode":"isolated"}
             )
         self.order_id = order['id']
         
     def e_short(self, close=False):  # 내릴것이다
         self.binance.load_markets()
-        price = self.inquire_curr_price()
+        raw_price = self.inquire_curr_price()
+        point_len = len(str(raw_price).split(".")[-1])
+        price = round(raw_price*(1+self.limit_amt_ratio), point_len)  
+
+        print(f"Try to [{self.sym}] price:{raw_price}->{price} SHORT order amt:{self.amount}")
+
         market = self.binance.markets[self.sym]
         if self.set_lev:
             resp = self.binance.set_leverage(
                 symbol=market['id'],
                 leverage=self.lev,
             )
-        order = self.binance.create_market_sell_order(
-            symbol=self.sym,
-            amount=np.abs(self.amount),
+        order = self.binance.create_order(
+            symbol=self.sym, type="limit", side="sell", amount=np.abs(self.amount), 
+            price=price, params={"marginMode":"isolated"}
             )
         self.order_id = order['id']
 
@@ -162,20 +174,21 @@ class Trader():
                     self.missed_timing += 1
 
             else :
-                # 시간이 오래 지날수록 욕심을 버리기
-                if (iter)%((3600/2)/self.time_interval) == 0 and iter > 0: # 3600 == 1h
-                    loss_count = np.sum(np.where(np.array(self.pre_pnls) < 0, 1, 0))
-                    loss_ratio = loss_count/len(self.pre_pnls)  # 값이 크면 계속 잃었던 것
-                    self.satisfying_profit *= 0.8
-                    self.satisfying_profit = round(max(self.satisfying_profit, self.min_profit), 2)
+                # # 시간이 오래 지날수록 욕심을 버리기
+                # if (iter)%((3600/2)/self.time_interval) == 0 and iter > 0: # 3600 == 1h
+                #     loss_count = np.sum(np.where(np.array(self.pre_pnls) < 0, 1, 0))
+                #     loss_ratio = loss_count/len(self.pre_pnls)  # 값이 크면 계속 잃었던 것
+                #     self.satisfying_profit *= 0.8
+                #     self.satisfying_profit = round(max(self.satisfying_profit, self.min_profit), 2)
 
-                m4_shape = m4_turn(ms[3])
+                # m4_shape = m4_turn(ms[3])
 
                 # curr pnl을 return하는건 그냥임
                 close_position, curr_pnl = timing_to_close(binance=self.binance, sym=self.sym, status=self.status, 
-                        m4_shape=m4_shape, ms=ms, satisfying_price=self.satisfying_profit, 
+                        m4_shape=0, ms=ms, satisfying_price=self.satisfying_profit, 
                         max_loss=self.max_loss, min_profit=self.min_profit, buying_cond=self.buying_cond, howmuchtime=iter,
                         tf=self.tf, limit=self.limit, wins=self.wins)
+                
                 self.pre_pnls.append(curr_pnl)
 
                 # h = int(round(3600/self.time_interval))
@@ -209,7 +222,8 @@ class Trader():
                 have2chg = False
                 # if (iter)%((3600/4)/self.time_interval) == 0 and iter > 0: # 3600 == 1h, every 15min
                 #     have2chg = isit_wrong_position(m2, self.status, n=4)  # d(3분봉) 4개 => 18분
-                
+                if curr_pnl == -100:
+                    return self.sym
                 if close_position:
                     try:
                         if self.status == LONG:
