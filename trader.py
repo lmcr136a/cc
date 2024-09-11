@@ -15,7 +15,7 @@ class Trader():
         self.other_running_sym_num = 0
         self.lev = 20
         self.max_loss = -3*self.lev                     # 마이너스인거 확인
-        self.min_profit = 0.8*self.lev   # 3 * 10
+        self.min_profit = 1*self.lev   # 3 * 10
         self.limit_amt_ratio = 0.01*0.02
         
         if not symbol:
@@ -56,20 +56,27 @@ class Trader():
         self.symnum -= self.other_running_sym_num 
         print(f"other_running_sym_num: {self.other_running_sym_num}  self.symnum: {self.symnum}")
 
-        for position in positions:
-            print(position)
-            if position["symbol"] == self.sym.replace("/", ""):
-                if init:
-                    pnl, profit = get_curr_pnl(self.binance, self.sym.replace("/", ""))
-                    self.init_ckpt(position, pnl)
-                    self.set_lev = False
-                    return 0
+        if init:
+            amt = self.get_curr_sym_amt()
+            print(amt, self.sym)
+            if abs(amt) > 0: 
+                pnl, profit = get_curr_pnl(self.binance, self.sym.replace("/", ""))
+                self.init_ckpt(amt, pnl)
+                self.set_lev = False
+                return 0
         self.status = None
 
+    def get_curr_sym_amt(self,):
+        balance = self.binance.fetch_balance()
+        positions = balance['info']['positions']
+        for position in positions:
+            if position["symbol"] == self.sym.replace("/", ""):
+                amt = float(position['positionAmt'])
+                return amt
+        return 0
+        
 
-    def init_ckpt(self, position, pnl):
-        amt = float(position['positionAmt'])
-        self.lev = round(float(position['notional'])/float(position['initialMargin']))
+    def init_ckpt(self, amt, pnl):
         self.amount = amt
         if amt < 0:
             self.status = SHORT
@@ -157,6 +164,9 @@ class Trader():
                     self.missed_timing += 1
 
             else :
+                if len(self.pre_pnls)*self.time_interval > 120 and not self.get_curr_sym_amt():
+                    return self.sym
+                
                 close_position, curr_pnl = timing_to_close(binance=self.binance, sym=self.sym, 
                                                            satisfying_profit=self.min_profit, 
                                                            max_loss=self.max_loss)

@@ -73,8 +73,8 @@ def inspect_market(binance, sym, print_=True):
         elif st2 == "BULL" and st3 == "BULL":         # 36~12 하락하다가 12시간전부터 오르기
             return LONG
         
-        else:
-            if st3 == "BEAR":       # 36 지그재그 12 지그재그 4 하락
-                return SHORT
-            if st3 == "BULL":     # 36 지그재그 12 지그재그 4 상승
-                return LONG
+        # else:
+        #     if st3 == "BEAR":       # 36 지그재그 12 지그재그 4 하락
+        #         return SHORT
+        #     if st3 == "BULL":     # 36 지그재그 12 지그재그 4 상승
+        #         return LONG

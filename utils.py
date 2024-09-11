@@ -51,7 +51,11 @@ def select_sym(binance, symnum):
         random.shuffle(SYMLIST)
         
         for sym in SYMLIST:  # 0705 0.55초 걸림
-            volume = list(binance.fetch_tickers(symbols=[sym]).values())[0]['quoteVolume']
+            try:
+                volume = list(binance.fetch_tickers(symbols=[sym]).values())[0]['quoteVolume']
+            except:
+                print("ERROR - ", sym)
+                continue
             if volume < 20*(10**6):
                 continue
             try:
@@ -113,6 +117,7 @@ def get_curr_pnl(binance, sym):
         if pos['symbol'] == sym:
             pnl = float(pos['unrealizedProfit'])/float(pos['initialMargin'])*100
             return round(pnl,2), round(float(pos['unrealizedProfit']), 2)
+    return 0, 0
 
 
 def timing_to_close(binance, sym, satisfying_profit, max_loss):
