@@ -1,6 +1,7 @@
 import importlib
 import argparse
 import trader   # 파일 수정 반영
+import time
 """
 TODO: 
 1. 15m 따라서 숏/롱 포지션 바꾸기
@@ -37,5 +38,6 @@ if __name__ == "__main__":
         with open('before_sym.txt', 'a') as f:
             f.write("\n"+str(before_sym))
         sym = None
+        time.sleep(60*1)
         if not args.re_execution:
             break

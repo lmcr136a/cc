@@ -1,7 +1,6 @@
 
 import numpy as np
 import pandas as pd
-import mplfinance as mpf
 import time
 import random
 import matplotlib.pyplot as plt
@@ -10,7 +9,7 @@ from colorama import Fore, Style, init
 from bull_bear import *
 from datetime import datetime
 from HYPERPARAMETERS import *
-from get_model import get_model_prediction
+# from get_model import get_model_prediction
 from ccxt.base.errors import BadSymbol
 # init(convert=True)
 
@@ -46,16 +45,17 @@ def curr_states_other_minions():
     return short_only_strong, long_only_strong, befores
 
 
-def select_sym(binance, __buying_cond, __pre_cond, tf, limit, wins, symnum):
+def select_sym(binance, symnum):
     print(_y("\nSEARCHING..."))
     while 1:
         random.shuffle(SYMLIST)
         
         for sym in SYMLIST:  # 0705 0.55초 걸림
-            short_only_strong, long_only_strong, befores = curr_states_other_minions()
-            buying_cond, pre_cond = __buying_cond, __pre_cond
+            volume = list(binance.fetch_tickers(symbols=[sym]).values())[0]['quoteVolume']
+            if volume < 20*(10**6):
+                continue
             try:
-                actions = inspect_market(binance, sym, 1, buying_cond, print_=False)
+                position = inspect_market(binance, sym, print_=True)
             except BadSymbol as E:
                 SYMLIST.pop(SYMLIST.index(sym))
                 print(f"REMOVE {sym} from DB")
@@ -63,30 +63,9 @@ def select_sym(binance, __buying_cond, __pre_cond, tf, limit, wins, symnum):
                     f.write(str(SYMLIST))
                 continue
 
-            short_only, long_only, buying_cond, _ = actions
-            
-            ms = get_ms(binance, sym, tf, limit, wins)
-            timing_pos = timing_to_position(binance, ms, sym, buying_cond, pre_cond, tf, limit, wins, pr=True)
-            
-            timing = False
-            # if (timing_pos == SHORT and not long_only)\
-            #     or (timing_pos == LONG and not short_only):
-            if timing_pos:
-                if (short_only_strong and timing_pos == LONG) or (long_only_strong and timing_pos == SHORT):
-                    continue
-                timing = True
-
-            if timing:
-                print(sym, "Timing")
-
-                # balance = binance.fetch_balance()
-                # positions = balance['info']['positions']
-                # for position in positions:
-                #     if position["symbol"] == sym.replace("/", ""):
-                #         amt = float(position['positionAmt'])
-                        # if amt == 0 and sym not in befores and sym.split("/")[0] not in ["MKR", "USDC", "ETC", "BNB", "BTC", "ETH", "BCH", "DASH", "XMR", "QNT", "LTC"]:
-                        #     print(f"S{sym} OOOOO")
-                return sym
+            if position:
+                print(f"[{sym}] {position} Timing")
+                return sym, position
             else:
                 time.sleep(0.3*symnum)
         # with open("syms.txt", 'w') as f:
@@ -136,52 +115,22 @@ def get_curr_pnl(binance, sym):
             return round(pnl,2), round(float(pos['unrealizedProfit']), 2)
 
 
-def timing_to_close(binance, sym, status, m4_shape, 
-                    ms, satisfying_price, max_loss, min_profit, buying_cond, howmuchtime, tf, limit, wins,):
-    m1 = ms[0]
+def timing_to_close(binance, sym, satisfying_profit, max_loss):
     try:
         curr_pnl, profit = get_curr_pnl(binance, sym.replace("/", ""))
     except:
         return True, -100
-    sat_cond = curr_pnl > satisfying_price
+    sat_cond = curr_pnl > satisfying_profit
     if sat_cond:
         print(f"\n!!! Satisfied: {curr_pnl}")
         return True, curr_pnl
-    if howmuchtime % 300 == 0:
-        print("")
 
     # timing_pos = timing_to_position_score(binance, ms, sym, buying_cond, 0, tf, limit, wins, pr=False)
-    print(f"\r{sym.split('/')[0]} {howmuchtime} {status_str(status)}] PNL: {profit} ({pnlstr(round(curr_pnl, 1))})|{satisfying_price}%\t", end="")
-    # 이 이상 잃을 수는 없다
+    print(f"\r{sym.split('/')[0]} ] PNL: {profit} ({pnlstr(round(curr_pnl, 1))})|{satisfying_profit}%\t", end="")
     if curr_pnl < max_loss:
         print(f"\n!!! max_loss: {curr_pnl}")
         return True, curr_pnl
-    elif curr_pnl < min_profit:
-        return False, curr_pnl
 
-    # if timing_pos:
-    #     return False, curr_pnl
-
-    # suddenly = isitsudden(m1, status)
-    # mvmt, last_diff = curr_movement(m1, minute=4)
-
-    # # 지그재그에서 위쪽이면 롱 팔고 아래면 숏 팔고
-    # zz_cond = False
-    # zigzag, zzdic = handle_zigzag(m1)
-    # if zigzag:
-    #     if (status == LONG and m1[-1] > zzdic['zzmax']) or\
-    #     (status == SHORT and m1[-1] < zzdic['zzmin']):
-    #         zz_cond = True
-
-    # # u 또는 n
-    # shape_cond = (((m4_shape=='u' and mvmt==FALLING and last_diff < CALM and status == SHORT) \
-    #                 or\
-    #                 (m4_shape=='n' and mvmt==RISING and last_diff < CALM and status == LONG)))
-    
-    # if (zz_cond or shape_cond):
-    #     print(f"!!!{_y(sym)} {pnlstr(curr_pnl)} {shape_cond} {sat_cond} {zz_cond}")
-    #     return True, curr_pnl
-    # else:
     return False, curr_pnl
 
 def timing_to_position(binance, ms, sym, buying_cond, pre_cond, tf, limit, wins, pr=True):
@@ -190,8 +139,8 @@ def timing_to_position(binance, ms, sym, buying_cond, pre_cond, tf, limit, wins,
     if rule_pred:
         return rule_pred
 
-def timing_to_position_model(binance, sym):
-    return get_model_prediction(binance=binance, sym=sym)
+# def timing_to_position_model(binance, sym):
+#     return get_model_prediction(binance=binance, sym=sym)
 
 
 def get_existing_positions():
@@ -218,29 +167,24 @@ def short_mvmt_timing(binance, ms, sym, buying_cond, pre_cond, tf, limit, wins, 
 
     m1, m2, m3 , m4 = ms
 
-    curr_mvmt, curr_diff = curr_movement(m1, minute=3)  # 5개 시간봉의 움직임
-    small_shape = shape_info(m2)
-
+    curr_mvmt, amount = curr_movement(m1, minute=5)  # 5개 시간봉의 움직임
+    # small_shape = shape_info(m2)
+    ref = 0.9
+    
+    if pr:
+        print(f"[{sym[:-5]}] curr_mvmt:{curr_mvmt} amt: {amount}")
+        
     if curr_mvmt == FALLING:
-        if small_shape == INCREASING_CONCAVE:  
-            # 오목, 증가
-            return LONG
-        if small_shape == DECREASING_CONVEX:
-            if pr:
-                print(f"[{sym[:-5]} CASE1] curr_mvmt:{curr_mvmt} {small_shape}")
-            # 볼록, 감소
+        if amount < -ref:
             return SHORT
-        
+        elif amount > -ref:
+            return LONG   
     elif curr_mvmt == RISING:
-        if small_shape == INCREASING_CONCAVE:  
-            if pr:
-                print(f"[{sym[:-5]} CASE2] curr_mvmt:{curr_mvmt} {small_shape}")
-            # 오목, 증가
+        if amount > ref:
             return LONG
-        if small_shape == DECREASING_CONVEX:
-            # 볼록, 감소
+        elif amount < ref:
             return SHORT
-        
+    
 
     # """
     # 이 아래로는 지그재그일때만 해당
@@ -301,17 +245,15 @@ def curr_movement(m, minute=2, ref=0.02):
     diff = []
     m = m[-minute-1:]
     for i in range(len(m)-1):
-        diff.append(m[i+1] - m[i])
+        diff.append((m[i+1] - m[i])/m[i])
     d = np.sum(diff)*100
 
-    diff = (m[-1] - m[0])/m[-2]*100
-    last_diff = (m[-1] - m[0])/m[-2]*100
-    if d > ref*minute/2 and (last_diff > ref):
-        return RISING, diff
-    elif d < -ref*minute/2 and (last_diff < -ref):
-        return FALLING, diff
+    if d > ref*minute/2:
+        return RISING, d
+    elif d < -ref*minute/2:
+        return FALLING, d
     else:
-        return "~", diff
+        return "~", d
 
 
 def isitsudden(m1, status, ref=0.085):
