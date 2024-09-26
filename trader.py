@@ -13,10 +13,10 @@ class Trader():
 
         self.symnum = float(symnum)
         self.other_running_sym_num = 0
-        self.lev = 20
-        self.max_loss = -3*self.lev                     # 마이너스인거 확인
-        self.min_profit = 1*self.lev   # 3 * 10
-        self.limit_amt_ratio = 0.01*0.02
+        self.lev = 10  # 0.07*lev = 0.7% 가 수수료
+        self.stoploss = -0.4*self.lev                     # 마이너스인거 확인
+        self.takeprofit = 0.6*self.lev   # 3 * 10
+        self.limit_amt_ratio = 0
         
         if not symbol:
             symbol, self.position_to_by = select_sym(self.binance, self.symnum)
@@ -30,7 +30,8 @@ class Trader():
         if self.set_lev:  # 기존꺼 가져오는 경우가 아니라 걍 첨에 시작하는 경우
             self.amount = cal_compound_amt(self.wallet_usdt, self.lev, float(self.inquire_curr_price()), self.symnum)
         
-        print(f"{'*'*50}\nwallet:{round(self.wallet_usdt, 3)}  lev:{self.lev} [[{self.max_loss}~{self.min_profit}]]")
+        self.filled = False
+        print(f"{'*'*50}\nwallet:{round(self.wallet_usdt, 3)}  lev:{self.lev} [[{self.stoploss}~{self.takeprofit}]]")
 
 
     def update_wallet(self, balance=None):
@@ -89,7 +90,7 @@ class Trader():
         info = self.binance.fetch_ticker(self.sym)
         return info['close']
 
-    def e_long(self, close=False):  # 오를것이다
+    def prep_order(self,):
         self.binance.load_markets()
         raw_price = self.inquire_curr_price()
         point_len = len(str(raw_price).split(".")[-1])
@@ -103,42 +104,33 @@ class Trader():
                 symbol=market['id'],
                 leverage=self.lev,
             )
+        return price
+
+    def open_order(self):
+        if self.status == LONG:
+            side = "buy"
+        elif self.status == SHORT:
+            side = "sell"
+        price = self.prep_order()
         order = self.binance.create_order(
-            symbol=self.sym, type="limit", side="buy", amount=np.abs(self.amount), 
-            price=price, params={"marginMode":"isolated"}
-            )
+            symbol=self.sym, type="limit", side=side, amount=np.abs(self.amount), price=price)
         self.order_id = order['id']
         
-    def e_short(self, close=False):  # 내릴것이다
-        self.binance.load_markets()
-        raw_price = self.inquire_curr_price()
-        point_len = len(str(raw_price).split(".")[-1])
-        price = round(raw_price*(1+self.limit_amt_ratio), point_len)  
-
-        print(f"Try to [{self.sym}] price:{raw_price}->{price} SHORT order amt:{self.amount}")
-
-        market = self.binance.markets[self.sym]
-        if self.set_lev:
-            resp = self.binance.set_leverage(
-                symbol=market['id'],
-                leverage=self.lev,
-            )
+    def close_order(self):
+        if self.status == LONG:
+            side = "sell"
+        elif self.status == SHORT:
+            side = "buy"
         order = self.binance.create_order(
-            symbol=self.sym, type="limit", side="sell", amount=np.abs(self.amount), 
-            price=price, params={"marginMode":"isolated"}
-            )
+            symbol=self.sym, type="market", side=side, amount=np.abs(self.amount))
         self.order_id = order['id']
 
-
     def run(self):
-        # print("\nStarting status: ", self.status)
         iter = 0
         self.anxious = 1
         self.pre_pnls = []
         self.missed_timing = 0
-        pnl_lastupdate = 0
         while 1:
-            # importlib.reload(utils)
             
             if self.missed_timing > 3:
                 return 0
@@ -147,13 +139,8 @@ class Trader():
                 self.status = self.position_to_by
 
                 try:
-                    # print("롱 숏 바뀜")
-                    if self.status == LONG:
-                        self.e_long()
-                        add_to_existing_positions(LONG)
-                    elif self.status == SHORT:
-                        self.e_short()
-                        add_to_existing_positions(SHORT)
+                    self.open_order()
+                    
                 except Exception as error:
                     print(error)
                     self.status = None
@@ -164,29 +151,26 @@ class Trader():
                     self.missed_timing += 1
 
             else :
-                if len(self.pre_pnls)*self.time_interval > 120 and not self.get_curr_sym_amt():
-                    return self.sym
+                curr_amt = self.get_curr_sym_amt()
                 
                 close_position, curr_pnl = timing_to_close(binance=self.binance, sym=self.sym, 
-                                                           satisfying_profit=self.min_profit, 
-                                                           max_loss=self.max_loss)
-                
+                                                           satisfying_profit=self.takeprofit, 
+                                                           max_loss=self.stoploss)
                 self.pre_pnls.append(curr_pnl)
-
                 if curr_pnl == -100:
                     return self.sym
                 
                 if close_position:
                     try:
-                        if self.status == LONG:
-                            self.e_short(close=True)
-                            pop_from_existing_positions(LONG)
-                        else:
-                            self.e_long(close=True)
-                            pop_from_existing_positions(SHORT)
+                        self.close_order()
                         return self.sym  # finish the iteration
                     except Exception as error:
                         print(error)
+                
+                
+                if len(self.pre_pnls) > 10 and not curr_amt and not self.filled:  # limit order 안사짐
+                    self.binance.cancel_order(id=int(self.order_id))
+                    return self.sym 
                 
 
             time.sleep(self.time_interval)

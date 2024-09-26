@@ -24,7 +24,7 @@ def past_data(binance, sym, tf, limit, since=None):
     return df
 
 
-def bull_or_bear(binance, sym, mode=1, ref=0.04):  
+def bull_or_bear(binance, sym, mode=1, ref=0.1):  
     """
     상승장인지 하락장인지?
     사실 이게 제일 중요한거같음
@@ -34,11 +34,11 @@ def bull_or_bear(binance, sym, mode=1, ref=0.04):
     """
     mode = 3
     if mode == 3:
-        tf, n, a = '1m', 30, 2
+        tf, n, a = '1m', 10, 2
     elif mode == 2:
-        tf, n, a = '5m', 24, 1.5
+        tf, n, a = '1m', 30, 1.5
     elif mode == 1:
-        tf, n, a = '15m', 16, 1
+        tf, n, a = '5m', 30, 1
     df = past_data(binance, sym=sym, tf=tf, limit=n)
     m = (df['high']+df['low'])/2  # df['close']로 해도 되는데 그냥 이렇게 함
     rising = []
