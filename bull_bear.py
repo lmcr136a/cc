@@ -24,7 +24,7 @@ def past_data(binance, sym, tf, limit, since=None):
     return df
 
 
-def bull_or_bear(binance, sym, mode=1, ref=0.1):  
+def bull_or_bear(binance, sym, mode=1, ref=0.05):  
     """
     상승장인지 하락장인지?
     사실 이게 제일 중요한거같음

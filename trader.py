@@ -14,8 +14,8 @@ class Trader():
         self.symnum = float(symnum)
         self.other_running_sym_num = 0
         self.lev = 10  # 0.07*lev = 0.7% 가 수수료
-        self.stoploss = -0.4*self.lev                     # 마이너스인거 확인
-        self.takeprofit = 0.6*self.lev   # 3 * 10
+        self.stoploss = -0.6*self.lev                     # 마이너스인거 확인
+        self.takeprofit = 0.9*self.lev   # 3 * 10
         self.limit_amt_ratio = 0
         
         if not symbol:
@@ -152,6 +152,10 @@ class Trader():
 
             else :
                 curr_amt = self.get_curr_sym_amt()
+                if len(self.pre_pnls) > 10 and not curr_amt:  # limit order 안사짐
+                    self.binance.cancel_order(id=int(self.order_id), symbol=self.sym)
+                    return self.sym 
+                
                 
                 close_position, curr_pnl = timing_to_close(binance=self.binance, sym=self.sym, 
                                                            satisfying_profit=self.takeprofit, 
@@ -167,10 +171,6 @@ class Trader():
                     except Exception as error:
                         print(error)
                 
-                
-                if len(self.pre_pnls) > 10 and not curr_amt and not self.filled:  # limit order 안사짐
-                    self.binance.cancel_order(id=int(self.order_id))
-                    return self.sym 
                 
 
             time.sleep(self.time_interval)

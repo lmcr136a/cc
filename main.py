@@ -38,6 +38,6 @@ if __name__ == "__main__":
         with open('before_sym.txt', 'a') as f:
             f.write("\n"+str(before_sym))
         sym = None
-        time.sleep(60*1)
+        # time.sleep(60*1)
         if not args.re_execution:
             break
