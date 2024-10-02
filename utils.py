@@ -11,6 +11,8 @@ from datetime import datetime
 from HYPERPARAMETERS import *
 # from get_model import get_model_prediction
 from ccxt.base.errors import BadSymbol
+import asyncio
+import ccxt.pro as ccxtpro
 # init(convert=True)
 
 def cal_compound_amt(wallet_usdt, lev, price, symnum):
@@ -45,36 +47,49 @@ def curr_states_other_minions():
     return short_only_strong, long_only_strong, befores
 
 
-def select_sym(binance, symnum):
+async def select_sym(binance, symnum):
     print(_y("\nSEARCHING..."))
+    max_score, min_score = 0,0
+    max_sym, min_sym = 0,0
     while 1:
         random.shuffle(SYMLIST)
         
-        for sym in SYMLIST:  # 0705 0.55초 걸림
-            try:
-                volume = list(binance.fetch_tickers(symbols=[sym]).values())[0]['quoteVolume']
-            except:
-                print("ERROR - ", sym)
-                continue
+        for i, sym in enumerate(SYMLIST):  # 0705 0.55초 걸림
+            print(f"[{i}/{len(SYMLIST)}] ", end="")
+            vol = await binance.fetch_tickers(symbols=[sym])
+            time.sleep(0.1*symnum)
+            await binance.close()
+            volume = list(vol.values())[0]['quoteVolume']
+            await binance.close()
             if volume < 20*(10**6):
                 continue
             try:
-                position = inspect_market(binance, sym, print_=True)
+                position, score = await inspect_market(binance, sym, print_=True)
+                if position == LONG and score > max_score:
+                    max_score, max_sym = score, sym
+                elif position == SHORT and score < min_score:
+                    min_score, min_sym = score, sym
+                    
             except BadSymbol as E:
                 SYMLIST.pop(SYMLIST.index(sym))
                 print(f"REMOVE {sym} from DB")
                 with open("symlist.txt", "w") as f:
                     f.write(str(SYMLIST))
                 continue
+            
+            if i > 10:
+                break
 
-            if position:
-                print(f"[{sym}] {position} Timing")
-                return sym, position
+        if max_score > 0 or min_score < 0:
+            print(f"== MAX: {max_sym} {max_score} | MIN: {min_sym} {min_score} ==")
+            await binance.close()
+            if abs(max_score) > abs(min_score):
+                return max_sym, LONG
             else:
-                time.sleep(0.3*symnum)
-        # with open("syms.txt", 'w') as f:
-        #     f.write(str(names))
-        # exit()
+                return min_sym, SHORT 
+        else:
+            print("\n\nNOTHING\n\n")
+
 
 def get_ms(binance, sym, tf, limit, wins):
     try:
@@ -104,19 +119,10 @@ def whether_calm(m1, ref=0.05, n=80):
     elif np.std(li) > ref:
         return False
     
-def get_curr_pnl(binance, sym):
-    try:
-        wallet = binance.fetch_balance(params={"type": "future"})
-    except Exception as E:
-        print(E)
-        time.sleep(3)
-        wallet = binance.fetch_balance(params={"type": "future"})
-    
-    positions = wallet['info']['positions']
-    for pos in positions:
-        if pos['symbol'] == sym:
-            pnl = float(pos['unrealizedProfit'])/float(pos['initialMargin'])*100
-            return round(pnl,2), round(float(pos['unrealizedProfit']), 2)
+def get_curr_pnl(wallet, pose_info):
+    if pose_info:
+        pnl = float(pose_info['unrealizedProfit'])/float(pose_info['initialMargin'])*100
+        return round(pnl,2), round(float(pose_info['unrealizedProfit']), 2)
     return 0, 0
 
 
@@ -395,7 +401,7 @@ def get_binance():
         api_key = lines[0].strip()
         secret  = lines[1].strip()
 
-    binance = ccxt.binance(config={
+    binance = ccxtpro.binance(config={
         'apiKey': api_key, 
         'secret': secret,
         'enableRateLimit': True,

@@ -2,6 +2,7 @@ import importlib
 import argparse
 import trader   # 파일 수정 반영
 import time
+import asyncio
 """
 TODO: 
 1. 15m 따라서 숏/롱 포지션 바꾸기
