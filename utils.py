@@ -59,10 +59,11 @@ async def select_sym(binance, symnum):
             vol = await binance.fetch_tickers(symbols=[sym])
             time.sleep(0.1*symnum)
             await binance.close()
-            volume = list(vol.values())[0]['quoteVolume']
-            await binance.close()
-            if volume < 20*(10**6):
+            
+            if (not len(list(vol.values())) > 0) or volume < 20*(10**6):
                 continue
+            else:
+                volume = list(vol.values())[0]['quoteVolume']
             try:
                 position, score = await inspect_market(binance, sym, print_=True)
                 if position == LONG and score > max_score:
