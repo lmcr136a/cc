@@ -47,7 +47,8 @@ def curr_states_other_minions():
     return short_only_strong, long_only_strong, befores
 
 
-async def select_sym(binance, symnum):
+async def select_sym(symnum):
+    binance = get_binance()
     print(_y("\nSEARCHING..."))
     max_score, min_score = 0,0
     max_sym, min_sym = 0,0
@@ -57,13 +58,12 @@ async def select_sym(binance, symnum):
         for i, sym in enumerate(SYMLIST):  # 0705 0.55초 걸림
             print(f"[{i}/{len(SYMLIST)}] ", end="")
             vol = await binance.fetch_tickers(symbols=[sym])
-            time.sleep(0.1*symnum)
+            time.sleep(0.5*symnum)
             await binance.close()
-            
-            if (not len(list(vol.values())) > 0) or volume < 20*(10**6):
+                
+            if (not len(list(vol.values())) > 0) or list(vol.values())[0]['quoteVolume'] < 20*(10**6):
                 continue
-            else:
-                volume = list(vol.values())[0]['quoteVolume']
+
             try:
                 position, score = await inspect_market(binance, sym, print_=True)
                 if position == LONG and score > max_score:
@@ -78,7 +78,7 @@ async def select_sym(binance, symnum):
                     f.write(str(SYMLIST))
                 continue
             
-            if i > 10:
+            if i > 50:
                 break
 
         if max_score > 0 or min_score < 0:
@@ -120,22 +120,30 @@ def whether_calm(m1, ref=0.05, n=80):
     elif np.std(li) > ref:
         return False
     
-def get_curr_pnl(wallet, pose_info):
-    if pose_info:
-        pnl = float(pose_info['unrealizedProfit'])/float(pose_info['initialMargin'])*100
-        return round(pnl,2), round(float(pose_info['unrealizedProfit']), 2)
-    return 0, 0
+async def get_curr_pnl(sym):
+    binance = get_binance()
+    await binance.fetch_markets()
+    balance = await binance.fetch_balance(params={"type": "future"})
+    await binance.close()
+    positions = balance['info']['positions']
+    
+    pnl, profit = 0,0
+    for position in positions:
+        amt = float(position['positionAmt'])
+        if position['symbol'] == sym.replace("/", ""):
+            pose_info = position
+            pnl = float(pose_info['unrealizedProfit'])/float(pose_info['initialMargin'])*100
+            profit = pose_info['unrealizedProfit']
+            
+    return round(pnl,2), round(float(profit), 2)
 
 
-def timing_to_close(binance, sym, satisfying_profit, max_loss):
-    try:
-        curr_pnl, profit = get_curr_pnl(binance, sym.replace("/", ""))
-    except:
-        return True, -100
-    sat_cond = curr_pnl > satisfying_profit
-    if sat_cond:
-        print(f"\n!!! Satisfied: {curr_pnl}")
-        return True, curr_pnl
+def timing_to_close(sym, satisfying_profit, max_loss):
+    curr_pnl, profit = asyncio.run(get_curr_pnl(sym.replace("/", "")))
+    # sat_cond = curr_pnl > satisfying_profit
+    # if sat_cond:
+    #     print(f"\n!!! Satisfied: {curr_pnl}")
+    #     return True, curr_pnl
 
     # timing_pos = timing_to_position_score(binance, ms, sym, buying_cond, 0, tf, limit, wins, pr=False)
     print(f"\r{sym.split('/')[0]} ] PNL: {profit} ({pnlstr(round(curr_pnl, 1))})|{satisfying_profit}%\t", end="")
