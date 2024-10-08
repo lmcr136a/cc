@@ -19,13 +19,13 @@ async def past_data(binance, sym, tf, limit, since=None):
     return df
 
 
-async def bull_or_bear(binance, sym, mode=1, ref=0.05):  
+async def bull_or_bear(binance, sym, mode=1, ref=0.01):  
     if mode == 2:
         tf, n = '1m', 10
     elif mode == 1:
         tf, n = '1m', 20
     df = await past_data(binance, sym=sym, tf=tf, limit=n)
-    m = (df['high']+df['low'])/2  # df['close']로 해도 되는데 그냥 이렇게 함
+    m =  np.mean([df["open"], df["high"], df["low"], df["close"]], axis=0)  # df['close']로 해도 되는데 그냥 이렇게 함
     rising = []
     for i in range(1, len(m)-1):
         rising.append((m[i+1] - m[i])/m[i]*100)

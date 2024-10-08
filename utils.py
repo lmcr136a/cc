@@ -66,11 +66,11 @@ async def select_sym(symnum):
 
             try:
                 position, score = await inspect_market(binance, sym, print_=True)
-                if position == LONG and score > max_score:
+        
+                if score > max_score:
                     max_score, max_sym = score, sym
-                elif position == SHORT and score < min_score:
+                elif score < min_score:
                     min_score, min_sym = score, sym
-                    
             except BadSymbol as E:
                 SYMLIST.pop(SYMLIST.index(sym))
                 print(f"REMOVE {sym} from DB")
@@ -80,14 +80,13 @@ async def select_sym(symnum):
             
             if i > 50:
                 break
-
-        if max_score > 0 or min_score < 0:
-            print(f"== MAX: {max_sym} {max_score} | MIN: {min_sym} {min_score} ==")
+        if (abs(max_score) > 0 or abs(min_score) > 0 ) and position:
             await binance.close()
+            print(f"== MAX: {max_sym} {max_score} | MIN: {min_sym} {min_score} ==")
             if abs(max_score) > abs(min_score):
-                return max_sym, LONG
+                return max_sym, position
             else:
-                return min_sym, SHORT 
+                return min_sym, position 
         else:
             print("\n\nNOTHING\n\n")
 
