@@ -13,8 +13,8 @@ class Trader():
         self.symnum = float(symnum)
         self.other_running_sym_num = 0
         self.lev = 10  # 0.07*lev = 0.7% 가 수수료
-        self.stoploss = -1*self.lev                     # 마이너스인거 확인
-        self.takeprofit = 0.5*self.lev   # 3 * 10
+        self.stoploss = -3                     # 마이너스인거 확인
+        self.takeprofit = 4   # 3 * 10
         self.limit_amt_ratio = 0
         
         if not symbol:
