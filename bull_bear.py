@@ -21,7 +21,7 @@ async def past_data(binance, sym, tf, limit, since=None):
 
 async def bull_or_bear(binance, sym, mode=1, ref=0.01):  
     if mode == 2:
-        tf, n = '1m', 10
+        tf, n = '1m', 5
     elif mode == 1:
         tf, n = '1m', 20
     df = await past_data(binance, sym=sym, tf=tf, limit=n)

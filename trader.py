@@ -14,7 +14,7 @@ class Trader():
         self.other_running_sym_num = 0
         self.lev = 2  # 0.07*lev = 0.7% 가 수수료
         self.stoploss = -30                     # 마이너스인거 확인
-        self.takeprofit = 4   # 3 * 10
+        self.takeprofit = 3   # 3 * 10
         self.limit_amt_ratio = 0
         
         if not symbol:

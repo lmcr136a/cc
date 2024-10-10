@@ -15,8 +15,10 @@ import asyncio
 import ccxt.pro as ccxtpro
 # init(convert=True)
 
+# def cal_compound_amt(wallet_usdt, lev, price, symnum):
+#     return float(wallet_usdt*lev/float(price)*0.9/float(symnum))
 def cal_compound_amt(wallet_usdt, lev, price, symnum):
-    return float(wallet_usdt*lev/float(price)*0.9/float(symnum))
+    return float(60*lev/float(price)*0.98)
 
 """
 죽 돌면서 봤는데 다 겁나 상승 or 하강만 하느라 지그재그가 없음 => 90%이상 [[00001111], [11110000]] 페어
@@ -52,6 +54,7 @@ async def select_sym(symnum):
     print(_y("\nSEARCHING..."))
     max_score, min_score = 0,0
     max_sym, min_sym = 0,0
+    return_pos = None
     while 1:
         random.shuffle(SYMLIST)
         
@@ -69,8 +72,10 @@ async def select_sym(symnum):
         
                 if score > max_score:
                     max_score, max_sym = score, sym
+                    return_pos = position
                 elif score < min_score:
                     min_score, min_sym = score, sym
+                    return_pos = position
             except BadSymbol as E:
                 SYMLIST.pop(SYMLIST.index(sym))
                 print(f"REMOVE {sym} from DB")
@@ -80,13 +85,13 @@ async def select_sym(symnum):
             
             if i > 50:
                 break
-        if (abs(max_score) > 0 or abs(min_score) > 0 ) and position:
+        if (abs(max_score) > 0 or abs(min_score) > 0 ) and return_pos:
             await binance.close()
             print(f"== MAX: {max_sym} {max_score} | MIN: {min_sym} {min_score} ==")
             if abs(max_score) > abs(min_score):
-                return max_sym, position
+                return max_sym, return_pos
             else:
-                return min_sym, position 
+                return min_sym, return_pos 
         else:
             print("\n\nNOTHING\n\n")
 
