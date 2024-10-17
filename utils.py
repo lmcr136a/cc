@@ -27,6 +27,8 @@ def cal_compound_amt(wallet_usdt, lev, price, symnum):
 
 """
 
+
+
 def curr_states_other_minions():
     with open("before_sym.txt", 'r') as f:
         befores = f.read()
@@ -55,27 +57,36 @@ async def select_sym(symnum):
     max_score, min_score = 0,0
     max_sym, min_sym = 0,0
     return_pos = None
-    while 1:
+    
+    market_dic = {
+        "//":[],
+        "-/":[],
+        "--":[],
+        "-d":[],
+        "dd":[],
+        "d-":[],
+        "/-":[],
+        "v":[],
+        "^":[],
+    }
+    
+    while return_pos is None:
         random.shuffle(SYMLIST)
-        
         for i, sym in enumerate(SYMLIST):  # 0705 0.55초 걸림
-            print(f"[{i}/{len(SYMLIST)}] ", end="")
             vol = await binance.fetch_tickers(symbols=[sym])
-            time.sleep(0.5*symnum)
+            time.sleep(0.5)
             await binance.close()
                 
             if (not len(list(vol.values())) > 0) or list(vol.values())[0]['quoteVolume'] < 20*(10**6):
                 continue
+            
+            print(f"[{i}/{len(SYMLIST)}] ", end="")
 
             try:
-                position, score = await inspect_market(binance, sym, print_=True)
-        
-                if score > max_score:
-                    max_score, max_sym = score, sym
-                    return_pos = position
-                elif score < min_score:
-                    min_score, min_sym = score, sym
-                    return_pos = position
+                shape, score = await inspect_market(binance, sym, print_=True)
+                if shape:
+                    market_dic[shape].append([sym, score])
+                
             except BadSymbol as E:
                 SYMLIST.pop(SYMLIST.index(sym))
                 print(f"REMOVE {sym} from DB")
@@ -83,18 +94,24 @@ async def select_sym(symnum):
                     f.write(str(SYMLIST))
                 continue
             
-            if i > 50:
+            if i > 20:
                 break
-        if (abs(max_score) > 0 or abs(min_score) > 0 ) and return_pos:
-            await binance.close()
-            print(f"== MAX: {max_sym} {max_score} | MIN: {min_sym} {min_score} ==")
-            if abs(max_score) > abs(min_score):
-                return max_sym, return_pos
-            else:
-                return min_sym, return_pos 
-        else:
-            print("\n\nNOTHING\n\n")
-
+            
+        
+        shape_nums = list(map(lambda x: len(x), market_dic.values()))
+        common_shape = list(market_dic.keys())[np.argmax(shape_nums)]
+        if common_shape in ["--", "^", "//", "-d", "/-", '-/']:
+            return_pos = LONG
+        elif common_shape in ["v", 'dd', 'd-']:
+            return_pos = SHORT
+        
+        print(market_dic[common_shape], common_shape)
+        common_shape_scores = np.array(market_dic[common_shape])[:, 1].astype(np.float32)
+        
+        return_sym = np.array(market_dic[common_shape])[:,0][np.argmax(np.abs(common_shape_scores))]
+        print(f" common shape: {common_shape} <<{return_sym}>>")
+        await binance.close()
+    return return_sym ,return_pos
 
 def get_ms(binance, sym, tf, limit, wins):
     try:
@@ -133,7 +150,6 @@ async def get_curr_pnl(sym):
     
     pnl, profit = 0,0
     for position in positions:
-        amt = float(position['positionAmt'])
         if position['symbol'] == sym.replace("/", ""):
             pose_info = position
             pnl = float(pose_info['unrealizedProfit'])/float(pose_info['initialMargin'])*100
@@ -437,9 +453,9 @@ def _m(str):
     return f"{Fore.MAGENTA}{str}{Style.RESET_ALL}"
 
 def pnlstr(pnlstr):
-    if float(pnlstr) < -1:
+    if float(pnlstr) < 0:
         return _r(str(pnlstr)+"%")
-    elif float(pnlstr) > 1:
+    elif float(pnlstr) > 0:
         return _c(str(pnlstr)+"%")
     else:
         return str(pnlstr)+"%"

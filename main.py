@@ -35,7 +35,7 @@ if __name__ == "__main__":
     while 1:
         importlib.reload(trader)
         minion = trader.Trader(sym, args.symnum)
-        if abs(minion.init_amt) > 0 and not args.symbol:
+        if abs(minion.init_amt) > 0 and not minion.checkpoint:
             continue
         before_sym = minion.run()
         with open('before_sym.txt', 'a') as f:

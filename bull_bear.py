@@ -19,11 +19,13 @@ async def past_data(binance, sym, tf, limit, since=None):
     return df
 
 
-async def bull_or_bear(binance, sym, mode=1, ref=0.01):  
-    if mode == 2:
-        tf, n = '1m', 5
+async def bull_or_bear(binance, sym, mode=1, ref=0.05):  
+    if mode == 3:
+        tf, n = '5m', 3
+    elif mode == 2:
+        tf, n = '15m', 20
     elif mode == 1:
-        tf, n = '1m', 20
+        tf, n = '15m', 60
     df = await past_data(binance, sym=sym, tf=tf, limit=n)
     m =  np.mean([df["open"], df["high"], df["low"], df["close"]], axis=0)  # df['close']로 해도 되는데 그냥 이렇게 함
     rising = []
@@ -41,19 +43,44 @@ async def bull_or_bear(binance, sym, mode=1, ref=0.01):
 
 
 async def inspect_market(binance, sym, print_=True):
+    st3, score3 = await bull_or_bear(binance, sym=sym, mode=3)
     st1, score1 = await bull_or_bear(binance, sym=sym, mode=1)
     st2, score2 = await bull_or_bear(binance, sym=sym, mode=2)
     score = score1+score2
+    
     if print_:
-        print(f"**{sym}__[40min~ {st1}]_[10min~ {st2}]")
+        print(f"**{sym}__[{st1}]_[{st2}]_[{st3}]")
 
-    if st1 == 'BEAR' and st2 == "BEAR":
-        return SHORT, score
-    elif st1 == 'BULL' and st2 == "BULL":         # 4시간동안 상승
-        return LONG, score
+    ## LONG ###
+    if st1 == 'BULL' and st2 == "BULL" and st3 == "BEAR":
+        return "//", score-score3
+    
+    # if st1 == '~-~-~' and st2 == "BULL" and st3 == "BEAR":
+    #     return "-/", score-score3
+    
+    if st1 == '~-~-~' and st2 == "~-~-~" and st3 == "BULL":
+        return "-/", score-score3
+    
+    # if st1 == '~-~-~' and st2 == "BEAR" and st3 == "BULL":
+    #     return "-d", score - score3
+    
+    if st1 == 'BEAR' and st2 == "~-~-~" and st3 == "BEAR":
+        return "d-", score-score3
+    
+    if st1 == 'BULL' and st2 == "~-~-~" and st3 == "BULL":
+        return "/-", score-score3
+    
+    if st1 == 'BULL' and st2 == "BEAR" and st3 == "BULL":
+        return "^", score
+    
+    ### SHORT ###
+    if st1 == 'BEAR' and st2 == "BEAR" and st3 == "BULL":
+        return "dd", score - score3
+    
+    if st1 == '~-~-~' and st2 == "~-~-~" and st3 == "BEAR":
+        return "-d", score-score3
+    
+    if st1 == 'BEAR' and st2 == 'BULL' and st3 == "BEAR":
+        return "v", score
+    
     return None, 0
-        # else:
-        #     if st3 == "BEAR":       # 36 지그재그 12 지그재그 4 하락
-        #         return SHORT
-        #     if st3 == "BULL":     # 36 지그재그 12 지그재그 4 상승
-        #         return LONG

@@ -12,21 +12,23 @@ class Trader():
     def __init__(self, symbol=None, symnum=1) -> None:
         self.symnum = float(symnum)
         self.other_running_sym_num = 0
-        self.lev = 2  # 0.07*lev = 0.7% 가 수수료
+        self.lev = 2  # 0.04*lev 가 수수료
         self.stoploss = -30                     # 마이너스인거 확인
-        self.takeprofit = 3   # 3 * 10
-        self.limit_amt_ratio = 0
+        self.takeprofit = 0.3   # 3 * 10
+        self.limit_amt_ratio = 0.0003
         
         if not symbol:
-            symbol, self.position_to_by = asyncio.run(select_sym(self.symnum))
-        self.sym = symbol
+            self.sym, self.position_to_by = asyncio.run(select_sym(self.symnum))
+            self.checkpoint=False
+        else:
+           self.sym = symbol
+           self.checkpoint=True
 
-        self.time_interval = 3
-        self.set_lev = True                     # 기존거 가져오는경우 다시 set하면 에러나기때문
+        self.time_interval = 5
+        self.status = None
         asyncio.run(self.inquire_curr_info(init=True))
-        self.init_amt = asyncio.run(self.get_curr_sym_amt())
         
-        if self.set_lev:  # 기존꺼 가져오는 경우가 아니라 걍 첨에 시작하는 경우
+        if not self.init_amt:  # 기존꺼 가져오는 경우가 아니라 걍 첨에 시작하는 경우
             self.amount = cal_compound_amt(self.wallet_usdt, self.lev, float(self.price), self.symnum)
         
         self.close_order_id = None if self.init_amt == 0 else asyncio.run(self.get_open_order_id())
@@ -73,14 +75,7 @@ class Trader():
         print(f"other_running_sym_num: {self.other_running_sym_num}  self.symnum: {self.symnum}")
 
         if init:
-            amt = await self.get_curr_sym_amt()
-            print(amt, self.sym)
-            if abs(amt) > 0: 
-                pnl, profit = await get_curr_pnl(self.sym)
-                self.init_ckpt(amt, pnl)
-                self.set_lev = False
-                return 0
-        self.status = None
+            await self.init_ckpt()
 
     async def get_curr_sym_amt(self):
         self.binance = get_binance()
@@ -95,45 +90,58 @@ class Trader():
         return 0
         
 
-    def init_ckpt(self, amt, pnl):
-        self.amount = amt
+    async def init_ckpt(self):
+        binance = get_binance()
+        positions = await binance.fetch_balance()
+        amt = 0
+        pnl = 0
+        self.entry_price = 0
+        for pos in positions['info']['positions']:
+            if pos['symbol'] == self.sym.replace("/", ""):
+                print(f'Init checkpoint {self.sym}')
+                amt = float(pos['positionAmt'])
+                profit = float(pos['unrealizedProfit'])
+                pnl = float(pos['unrealizedProfit'])/float(pos['initialMargin'])*100
+                break
         if amt < 0:
             self.status = SHORT
         elif amt > 0:
             self.status = LONG
-        print(f"{self.sym} {self.status} Current PNL:", pnl, "% Leverage: ", self.lev, ' Amt: ', amt)
+        self.amount = abs(amt)
+        self.init_amt = amt
+        await binance.close()
+        print(f"{self.sym} {self.status} Current PNL:", pnl, "% Leverage: ", self.lev, ' entry_price: ', self.entry_price)
         
 
     async def prep_order(self,):
-        await self.binance.load_markets()
-        info = await self.binance.fetch_ticker(self.sym)
-        raw_price = info['close']
+        binance = get_binance()
+        await binance.load_markets()
+        ticker = await binance.fetch_ticker(self.sym)
+        raw_price = ticker['last']
+        # raw_price = info['close']
         point_len = len(str(raw_price).split(".")[-1])
         price = round(raw_price*(1-self.limit_amt_ratio), point_len)  
 
-        print(f"Try to [{self.sym}] price:{raw_price}->{price} LONG order amt:{self.amount}")
-
-        market = self.binance.markets[self.sym]
-        if self.set_lev:
-            resp = await self.binance.set_leverage(
-                symbol=market['id'],
-                leverage=self.lev,
-            )
+        market = binance.markets[self.sym]
+        resp = await binance.set_leverage(
+            symbol=market['id'],
+            leverage=self.lev,
+        )
+        await binance.close()
         return price
 
     async def open_order(self):
         self.binance = get_binance()
-        price = await self.prep_order()
+        self.entry_price = await self.prep_order()
         
+        print(f"Try to [{self.sym}] price:{self.entry_price} {self.status} order amt:{self.amount}")
         if self.status == LONG:
             side = "buy"
-            self.close_price = price*(1+self.takeprofit*0.01/self.lev)
         elif self.status == SHORT:
             side = "sell"
-            self.close_price = price*(1-self.takeprofit*0.01/self.lev)
             
         order = await self.binance.create_order(
-            symbol=self.sym, type="limit", side=side, amount=np.abs(self.amount), price=price)
+            symbol=self.sym, type="limit", side=side, amount=np.abs(self.amount), price=self.entry_price)
         
         self.order_id = order['id']
         await self.binance.close()
@@ -150,12 +158,16 @@ class Trader():
         await self.binance.close()
         
         
-    async def close_limit_order(self):
+    async def close_limit_order(self, entry_price=None):
         self.binance = get_binance()
+        if not entry_price:
+            entry_price = await self.prep_order()
         if self.status == LONG:
             close_side = "sell"
+            self.close_price = entry_price*(1+self.takeprofit*0.01/self.lev)
         elif self.status == SHORT:
             close_side = "buy"
+            self.close_price = entry_price*(1-self.takeprofit*0.01/self.lev)
             
         close_order = await self.binance.create_order(
             symbol=self.sym, type="limit", side=close_side, amount=np.abs(self.amount), price=self.close_price)
@@ -178,6 +190,7 @@ class Trader():
             
             if self.missed_timing > 3:
                 return 0
+            
             if not self.status:
             
                 self.status = self.position_to_by
@@ -196,6 +209,11 @@ class Trader():
 
             else :
                 curr_amt = asyncio.run(self.get_curr_sym_amt())
+                if len(self.pre_pnls) == 1000 and self.entry_price > 0:
+                    self.takeprofit = 3
+                    asyncio.run(self.cancel_order(self.close_order_id))
+                    asyncio.run(self.close_limit_order(entry_price=self.entry_price))
+                    
                 if not self.close_order_id:
                     if len(self.pre_pnls) > 20 and not curr_amt:  # limit order 안사짐
                         asyncio.run(self.cancel_order(self.order_id))

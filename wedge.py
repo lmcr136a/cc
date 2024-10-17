@@ -40,10 +40,10 @@ def pivot_id(ohlc, l, n1, n2):
     try:
         timestamp_list = [l + x for x in range(-n1, n2+1)] 
         for i in timestamp_list:
-            if(ohlc.loc[l]["close"] > ohlc.loc[i]["close"]):
+            if(ohlc.loc[l]["low"] > ohlc.loc[i]["low"]):
                 pivot_low = 0
 
-            if(ohlc.loc[l]["close"] < ohlc.loc[i]["close"]):
+            if(ohlc.loc[l]["high"] < ohlc.loc[i]["high"]):
                 pivot_high = 0
 
         if pivot_low and pivot_high:
@@ -70,9 +70,9 @@ def pivot_point_position(row):
     """
    
     if row['Pivot']==1:
-        return row['close']-1e-3
+        return row['low']-1e-3
     elif row['Pivot']==2:
-        return row['close']+1e-3
+        return row['high']+1e-3
     else:
         return np.nan
 
@@ -86,7 +86,7 @@ def find_wedge_points(ohlc, back_candles):
     :return all_points
     """
     all_points = []
-    for candle_idx in range(back_candles+10, len(ohlc)):
+    for candle_idx in range(back_candles, len(ohlc)):
 
         maxim = np.array([])
         minim = np.array([])
@@ -168,10 +168,10 @@ def save_plot(ohlc, all_points, back_candles):
 
         for i in range(point-back_candles, point+1):
             if ohlc.loc[i,"Pivot"] == 1:
-                minim = np.append(minim, ohlc.loc[i, "close"])
+                minim = np.append(minim, ohlc.loc[i, "low"])
                 xxmin = np.append(xxmin, i) 
             if ohlc.loc[i,"Pivot"] == 2:
-                maxim = np.append(maxim, ohlc.loc[i,"close"])
+                maxim = np.append(maxim, ohlc.loc[i,"high"])
                 xxmax = np.append(xxmax, i)
                 
 
