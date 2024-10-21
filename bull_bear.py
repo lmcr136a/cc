@@ -55,17 +55,11 @@ async def inspect_market(binance, sym, print_=True):
     if st1 == 'BULL' and st2 == "BULL" and st3 == "BEAR":
         return "//", score-score3
     
-    # if st1 == '~-~-~' and st2 == "BULL" and st3 == "BEAR":
-    #     return "-/", score-score3
-    
     if st1 == '~-~-~' and st2 == "~-~-~" and st3 == "BULL":
         return "-/", score-score3
     
-    # if st1 == '~-~-~' and st2 == "BEAR" and st3 == "BULL":
-    #     return "-d", score - score3
-    
-    if st1 == 'BEAR' and st2 == "~-~-~" and st3 == "BEAR":
-        return "d-", score-score3
+    if st1 == '~-~-~' and st2 == "BEAR" and st3 == "BULL":
+        return "-/", score - score3
     
     if st1 == 'BULL' and st2 == "~-~-~" and st3 == "BULL":
         return "/-", score-score3
@@ -74,6 +68,12 @@ async def inspect_market(binance, sym, print_=True):
         return "^", score
     
     ### SHORT ###
+    if st1 == '~-~-~' and st2 == "BULL" and st3 == "BEAR":
+        return "-d", score-score3
+    
+    if st1 == 'BEAR' and st2 == "~-~-~" and st3 == "BEAR":
+        return "d-", score-score3
+    
     if st1 == 'BEAR' and st2 == "BEAR" and st3 == "BULL":
         return "dd", score - score3
     

@@ -100,18 +100,18 @@ async def select_sym(symnum):
         
         shape_nums = list(map(lambda x: len(x), market_dic.values()))
         common_shape = list(market_dic.keys())[np.argmax(shape_nums)]
-        if common_shape in ["--", "^", "//", "-d", "/-", '-/']:
+        if common_shape in ["--", "^", "//", "/-", '-/']:
             return_pos = LONG
-        elif common_shape in ["v", 'dd', 'd-']:
+        elif common_shape in ["v", 'dd', '-d','d-']:
             return_pos = SHORT
-        
-        print(market_dic[common_shape], common_shape)
-        common_shape_scores = np.array(market_dic[common_shape])[:, 1].astype(np.float32)
-        
-        return_sym = np.array(market_dic[common_shape])[:,0][np.argmax(np.abs(common_shape_scores))]
-        print(f" common shape: {common_shape} <<{return_sym}>>")
-        await binance.close()
-    return return_sym ,return_pos
+        if len(market_dic[common_shape]) > 0:
+            print(market_dic[common_shape], common_shape)
+            common_shape_scores = np.array(market_dic[common_shape])[:, 1].astype(np.float32)
+            
+            return_sym = np.array(market_dic[common_shape])[:,0][np.argmax(np.abs(common_shape_scores))]
+            print(f" common shape: {common_shape} <<{return_sym}>>")
+            await binance.close()
+            return return_sym ,return_pos
 
 def get_ms(binance, sym, tf, limit, wins):
     try:

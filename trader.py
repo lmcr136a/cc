@@ -30,8 +30,12 @@ class Trader():
         
         if not self.init_amt:  # 기존꺼 가져오는 경우가 아니라 걍 첨에 시작하는 경우
             self.amount = cal_compound_amt(self.wallet_usdt, self.lev, float(self.price), self.symnum)
-        
-        self.close_order_id = None if self.init_amt == 0 else asyncio.run(self.get_open_order_id())
+            self.close_order_id = None
+        else:
+            if not symbol:
+                pass
+            else: 
+                self.close_order_id = asyncio.run(self.get_open_order_id())
         print(f"{'*'*50}\nwallet:{round(self.wallet_usdt, 3)}  lev:{self.lev} [[{self.stoploss}~{self.takeprofit}]]")
 
     
@@ -128,13 +132,13 @@ class Trader():
             leverage=self.lev,
         )
         await binance.close()
+        print(f"SUBMITTING ORDER [{self.sym}] price:{price} {self.status}")
         return price
 
     async def open_order(self):
         self.binance = get_binance()
         self.entry_price = await self.prep_order()
         
-        print(f"Try to [{self.sym}] price:{self.entry_price} {self.status} order amt:{self.amount}")
         if self.status == LONG:
             side = "buy"
         elif self.status == SHORT:
