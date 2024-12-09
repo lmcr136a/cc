@@ -6,34 +6,22 @@ import random
 import matplotlib.pyplot as plt
 import ccxt 
 from colorama import Fore, Style, init
-from bull_bear import *
 from datetime import datetime
 from HYPERPARAMETERS import *
-# from get_model import get_model_prediction
-from ccxt.base.errors import BadSymbol
 import asyncio
 import ccxt.pro as ccxtpro
-# init(convert=True)
+
 
 # def cal_compound_amt(wallet_usdt, lev, price, symnum):
 #     return float(wallet_usdt*lev/float(price)*0.9/float(symnum))
-def cal_compound_amt(wallet_usdt, lev, price, symnum):
-    return float(60*lev/float(price)*0.98)
-
-"""
-죽 돌면서 봤는데 다 겁나 상승 or 하강만 하느라 지그재그가 없음 => 90%이상 [[00001111], [11110000]] 페어
-=> 지그재그더라도 내린게 더내리고 오른게 더오를 확률이 높음
-=> 상승장에서 m3가 u모양이면 롱사기, m3가 n모양이면 숏사기
-
-"""
-
+def cal_compound_amt(lev, price):
+    return float(100*lev/float(price)*0.98)
 
 
 def curr_states_other_minions():
     with open("before_sym.txt", 'r') as f:
         befores = f.read()
     befores = befores.split("\n")
-    # print(befores)
     positions = get_existing_positions()
     n1, n2 = 0, 0
     for pos in positions:
@@ -51,67 +39,14 @@ def curr_states_other_minions():
     return short_only_strong, long_only_strong, befores
 
 
-async def select_sym(symnum):
-    binance = get_binance()
-    print(_y("\nSEARCHING..."))
-    max_score, min_score = 0,0
-    max_sym, min_sym = 0,0
-    return_pos = None
-    
-    market_dic = {
-        "//":[],
-        "-/":[],
-        "--":[],
-        "-d":[],
-        "dd":[],
-        "d-":[],
-        "/-":[],
-        "v":[],
-        "^":[],
-    }
-    
-    while return_pos is None:
-        random.shuffle(SYMLIST)
-        for i, sym in enumerate(SYMLIST):  # 0705 0.55초 걸림
-            vol = await binance.fetch_tickers(symbols=[sym])
-            time.sleep(0.5)
-            await binance.close()
-                
-            if (not len(list(vol.values())) > 0) or list(vol.values())[0]['quoteVolume'] < 20*(10**6):
-                continue
-            
-            print(f"[{i}/{len(SYMLIST)}] ", end="")
+async def past_data(binance, sym, tf, limit, since=None):
+    coininfo = await binance.fetch_ohlcv(symbol=sym, 
+        timeframe=tf, since=since, limit=limit)
 
-            try:
-                shape, score = await inspect_market(binance, sym, print_=True)
-                if shape:
-                    market_dic[shape].append([sym, score])
-                
-            except BadSymbol as E:
-                SYMLIST.pop(SYMLIST.index(sym))
-                print(f"REMOVE {sym} from DB")
-                with open("symlist.txt", "w") as f:
-                    f.write(str(SYMLIST))
-                continue
-            
-            if i > 20:
-                break
-            
-        
-        shape_nums = list(map(lambda x: len(x), market_dic.values()))
-        common_shape = list(market_dic.keys())[np.argmax(shape_nums)]
-        if common_shape in ["--", "^", "//", "/-", '-/']:
-            return_pos = LONG
-        elif common_shape in ["v", 'dd', '-d','d-']:
-            return_pos = SHORT
-        if len(market_dic[common_shape]) > 0:
-            print(market_dic[common_shape], common_shape)
-            common_shape_scores = np.array(market_dic[common_shape])[:, 1].astype(np.float32)
-            
-            return_sym = np.array(market_dic[common_shape])[:,0][np.argmax(np.abs(common_shape_scores))]
-            print(f" common shape: {common_shape} <<{return_sym}>>")
-            await binance.close()
-            return return_sym ,return_pos
+    df = pd.DataFrame(coininfo, columns=['datetime', 'open', 'high', 'low', 'close', 'volume'])
+    df['datetime'] = pd.to_datetime(df['datetime'], unit='ms')
+    df.set_index('datetime', inplace=True)
+    return df
 
 def get_ms(binance, sym, tf, limit, wins):
     try:
@@ -158,15 +93,9 @@ async def get_curr_pnl(sym):
     return round(pnl,2), round(float(profit), 2)
 
 
-def timing_to_close(sym, satisfying_profit, max_loss):
+def timing_to_close(sym, max_loss, N):
     curr_pnl, profit = asyncio.run(get_curr_pnl(sym.replace("/", "")))
-    # sat_cond = curr_pnl > satisfying_profit
-    # if sat_cond:
-    #     print(f"\n!!! Satisfied: {curr_pnl}")
-    #     return True, curr_pnl
-
-    # timing_pos = timing_to_position_score(binance, ms, sym, buying_cond, 0, tf, limit, wins, pr=False)
-    print(f"\r{sym.split('/')[0]} ] PNL: {profit} ({pnlstr(round(curr_pnl, 1))})|{satisfying_profit}%\t", end="")
+    print(f"\r{N}) [{sym.split('/')[0]}] PNL: {profit} ({pnlstr(round(curr_pnl, 1))})%\t", end="")
     if curr_pnl < max_loss:
         print(f"\n!!! max_loss: {curr_pnl}")
         return True, curr_pnl
@@ -445,7 +374,7 @@ def _b(str):
     return f"{Fore.BLUE}{str}{Style.RESET_ALL}"
 def _r(str):
     return f"{Fore.RED}{str}{Style.RESET_ALL}"
-def _y(str):
+def y(str):
     return f"{Fore.YELLOW}{str}{Style.RESET_ALL}"
 def _c(str):
     return f"{Fore.CYAN}{str}{Style.RESET_ALL}"

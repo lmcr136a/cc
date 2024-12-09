@@ -20,7 +20,7 @@ if __name__ == "__main__":
                         default=None,
                         type=str,
                         )
-    parser.add_argument('--symnum',
+    parser.add_argument('--number',
                         '-n',
                         default=1,
                         type=int,
@@ -34,13 +34,10 @@ if __name__ == "__main__":
     sym = args.symbol if not args.symbol or '/USDT' in args.symbol else args.symbol + '/USDT'
     while 1:
         importlib.reload(trader)
-        minion = trader.Trader(sym, args.symnum)
+        minion = trader.Trader(sym, args.number)
         if abs(minion.init_amt) > 0 and not minion.checkpoint:
             continue
         before_sym = minion.run()
-        with open('before_sym.txt', 'a') as f:
-            f.write("\n"+str(before_sym))
         sym = None
-        # time.sleep(60*1)
         if not args.re_execution:
             break

@@ -1,1 +1,0 @@
-['Short', 'Short', 'Short', 'Short', 'Short', 'Short', 'Short', 'Short', 'Short', 'Short', 'Long', 'Short', 'Short', 'Short', 'Short', 'Long', 'Short', 'Short', 'Short', 'Short', 'Long', 'Long', 'Long', 'Long', 'Long', 'Long', 'Long', 'Long', 'Long', 'Short']
