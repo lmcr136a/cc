@@ -70,6 +70,15 @@ def pivot_id(ohlc, l, n1, n2):
 
             if(ohlc.loc[l]["high"] < ohlc.loc[i]["high"]):
                 pivot_high = 0
+                
+            if(ohlc.loc[l]["high"] == ohlc.loc[i]["high"]):
+                if l < i:
+                    pivot_high = 0
+                    
+            if(ohlc.loc[l]["low"] == ohlc.loc[i]["low"]):
+                if l < i:
+                    pivot_low = 0
+                    
         except KeyError as e:
             pass
     if pivot_low and pivot_high:

@@ -13,7 +13,7 @@ class Trader():
     def __init__(self, symbol=None, number=1) -> None:
         self.N = int(number)
         self.other_running_sym_num = 0
-        self.lev = 4  # 0.04*lev 가 수수료
+        self.lev = 1  # 0.04*lev 가 수수료
         self.stoploss = -1                     # 마이너스인거 확인
         # self.takeprofit = 0.7   # 3 * 10
         self.limit_amt_ratio = 0.0003
@@ -132,14 +132,22 @@ class Trader():
 
         binance = get_binance()
         await binance.load_markets()
-        market = binance.markets[self.sym]
-        resp = await binance.set_leverage(
-            symbol=market['id'],
-            leverage=self.lev,
-        )
+        symli = list(binance.markets.keys())
+        if self.sym in symli or self.sym+":USDT" in symli:
+            try:
+                market = binance.markets[self.sym]
+            except:
+                market = binance.markets[self.sym+":USDT"]
+                
+            resp = await binance.set_leverage(
+                symbol=market['id'],
+                leverage=self.lev,
+            )
+        else:
+            raise
         await binance.close()
         print()
-        print(f"SUBMITTING ORDER [{self.sym}] price:{price} {self.status}")
+        print(f"SUBMITTING ORDER [{self.sym}] price:{price}")
         return price
 
     async def open_order(self):
