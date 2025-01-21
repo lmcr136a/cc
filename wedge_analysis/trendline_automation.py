@@ -168,6 +168,8 @@ def find_t_convergence(pivots, pivottype, interval, ref_price):
     # bottom
     i = len(s_ps)-interval
     block_data = s_ps[i: i+interval]
+    if len(block_data) != len(x):
+        return (None, None)
     c = np.polyfit(x, block_data, 1)
     if check_line_fit(c[0], block_data):
         s = {"a": c[0] / (support_idx[i+interval-1] - support_idx[i])*(interval-1), 
@@ -192,12 +194,11 @@ def find_t_convergence(pivots, pivottype, interval, ref_price):
         return (None, None)
     
     max_slope_diff = ref_price*0.01*0.3
-    min_slope_diff = ref_price*0.01*0.01
+    min_slope_diff = 0 #ref_price*0.01*0.01
     x_index_ref = 20
     
     if np.abs(s["start_x"] - r['start_x']) < x_index_ref and \
         np.abs(s["last_x3"] - r['last_x3']) < x_index_ref and \
-        (s["a"] > r["a"]) and \
         np.abs(s["a"] - r["a"]) > min_slope_diff and \
         np.abs(s["a"] - r["a"]) < max_slope_diff:
        return (s, r)

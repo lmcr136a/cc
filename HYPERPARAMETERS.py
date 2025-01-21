@@ -13,3 +13,6 @@ with open("symlist.txt", 'r') as f:
 
 COND_LV1, COND_LV2 = 0.25, 0.15
 SATISFYING_LV1, SATISFYING_LV2 = 15, 15  # 이만큼만 먹고 나오기
+
+BUY_COLOR = (0, 0.8, 0.8)    
+SELL_COLOR = (1, 0, 0.3)   

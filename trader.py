@@ -3,9 +3,10 @@ import numpy as np
 import time
 import utils
 from utils import *
-from wedge_analysis.wedge_analysis import select_sym
+from select_sym import select_sym
 import asyncio
-
+from wedge_analysis.wedge_analysis import find_wedge
+from heikin_ashi.find_heikin import find_heikin
 """
 1.2
 """
@@ -14,7 +15,7 @@ class Trader():
         self.N = int(number)
         self.other_running_sym_num = 0
         self.lev = 1  # 0.04*lev 가 수수료
-        self.stoploss = -1                     # 마이너스인거 확인
+        self.stoploss = -1*self.lev                     # 마이너스인거 확인
         # self.takeprofit = 0.7   # 3 * 10
         self.limit_amt_ratio = 0.0003
         
@@ -208,15 +209,19 @@ class Trader():
         while 1:
             
             if not self.status:
-                
                 curr_price = asyncio.run(self.get_curr_price())
+                self.res = asyncio.run(find_wedge(self.sym, imgfilename="minion"+str(self.N), decided_res=self.res))
+                if not self.res:
+                    return self.sym
                 
                 print(f'\r{self.N}) [{self.sym.split("/")[0]}] {self.res["ent_price2"]} < Current price: {curr_price} < {self.res["ent_price1"]}', end="")
-                if curr_price >= self.res["ent_price1"]:
+                # if self.res["ent_price1"]:
+                if self.res["ent_price1"] and curr_price >= self.res["ent_price1"]:
                     self.position_to_by = self.res["position1"]
                     self.close_price = self.res["close_price1"]
                     
-                elif curr_price <= self.res["ent_price2"]:
+                # elif self.res["ent_price2"]:
+                elif self.res["ent_price2"] and curr_price <= self.res["ent_price2"]:
                     self.position_to_by = self.res["position2"]
                     self.close_price = self.res["close_price2"]
                 
@@ -227,9 +232,13 @@ class Trader():
 
                 asyncio.run(self.open_order())
 
-                if not self.status:
-                    self.missed_timing += 1
+                # if not self.status:
+                #     self.missed_timing += 1
+                # if self.missed_timing > 25*60/self.time_interval:
+                #     return self.sym
 
+                # self.res = asyncio.run(find_wedge(self.sym, imgfilename="minion"+str(self.N)))
+                
             else :
                 curr_amt = asyncio.run(self.get_curr_sym_amt())
                 # if len(self.pre_pnls) == 1000 and self.entry_price > 0:

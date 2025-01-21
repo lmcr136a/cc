@@ -19,30 +19,6 @@ from datetime import timedelta
 
 plt.style.use('seaborn-darkgrid')
 
-def SMA(data,period, column = 'close') :
-    return data[column].rolling(window = period).mean()
-
-def add_RSI(data, period = 6, column = 'close') :
-    delta = data[column].diff(1)
-    delta = delta.dropna()
-    
-    up = delta.copy()
-    down = delta.copy()
-    up[up <0] =0
-    down[down>0] = 0
-    data['up'] = up
-    data['down'] = down
-    
-    AVG_Gain = SMA(data, period, column = 'up')
-    AVG_Loss = abs(SMA(data,period,column = 'down'))
-    RS = AVG_Gain / AVG_Loss
-    
-    RSI = 100.0 - (100.0 / (1.0+RS))
-    RSI = [50]*period + RSI.to_list()[period:]
-    data['rsi'] = RSI
-    
-    return data
-
 
 def pivot_id(ohlc, l, n1, n2):
     """

@@ -33,11 +33,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
     sym = args.symbol if not args.symbol or '/USDT' in args.symbol else args.symbol + '/USDT'
     while 1:
-        importlib.reload(trader)
-        minion = trader.Trader(sym, args.number)
-        if abs(minion.init_amt) > 0 and not minion.checkpoint:
-            continue
-        before_sym = minion.run()
-        sym = None
-        if not args.re_execution:
-            break
+        try:
+            importlib.reload(trader)
+            minion = trader.Trader(sym, args.number)
+            if abs(minion.init_amt) > 0 and not minion.checkpoint:
+                continue
+            before_sym = minion.run()
+            sym = None
+            if not args.re_execution:
+                break
+        except Exception as e: 
+            print(e)
+            time.sleep(1)
