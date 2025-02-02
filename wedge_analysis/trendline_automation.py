@@ -17,9 +17,9 @@ def check_trend_line(support: bool, pivot: int, slope: float, y: np.array):
     diffs = line_vals - y
     
     # Check to see if the line is valid, return -1 if it is not valid.
-    if support and diffs.max() > 1e-5:
+    if support and diffs.max() > 1e-6:
         return -1.0
-    elif not support and diffs.min() < -1e-5:
+    elif not support and diffs.min() < -1e-6:
         return -1.0
 
     # Squared sum of diffs between data and line 
@@ -199,6 +199,8 @@ def find_t_convergence(pivots, pivottype, interval, ref_price):
     
     if np.abs(s["start_x"] - r['start_x']) < x_index_ref and \
         np.abs(s["last_x3"] - r['last_x3']) < x_index_ref and \
+        s["last_x1"] < r["last_x2"] and \
+        r["last_x1"] < s["last_x2"] and \
         np.abs(s["a"] - r["a"]) > min_slope_diff and \
         np.abs(s["a"] - r["a"]) < max_slope_diff:
        return (s, r)

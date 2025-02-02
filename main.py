@@ -3,6 +3,7 @@ import argparse
 import trader   # 파일 수정 반영
 import time
 import asyncio
+from utils import pop_from_existing_positions
 """
 TODO: 
 1. 15m 따라서 숏/롱 포지션 바꾸기
@@ -36,7 +37,7 @@ if __name__ == "__main__":
         try:
             importlib.reload(trader)
             minion = trader.Trader(sym, args.number)
-            if abs(minion.init_amt) > 0 and not minion.checkpoint:
+            if minion.this_sym_is_running:
                 continue
             before_sym = minion.run()
             sym = None

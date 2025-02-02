@@ -15,28 +15,7 @@ import ccxt.pro as ccxtpro
 # def cal_compound_amt(wallet_usdt, lev, price, symnum):
 #     return float(wallet_usdt*lev/float(price)*0.9/float(symnum))
 def cal_compound_amt(lev, price):
-    return float(10*lev/float(price)*0.98)
-
-
-def curr_states_other_minions():
-    with open("before_sym.txt", 'r') as f:
-        befores = f.read()
-    befores = befores.split("\n")
-    positions = get_existing_positions()
-    n1, n2 = 0, 0
-    for pos in positions:
-        if pos == LONG:
-            n1 +=1
-        elif pos == SHORT:
-            n2 += 1
-    short_only_strong, long_only_strong = False, False
-    if n1 > 3:
-        short_only_strong = True
-        # print("Short Only..")
-    if n2 > 3:
-        long_only_strong = True
-        # print("Long Only...")
-    return short_only_strong, long_only_strong, befores
+    return float(10*lev/float(price))
 
 
 async def past_data(binance, sym, tf, limit, since=None):
@@ -48,33 +27,6 @@ async def past_data(binance, sym, tf, limit, since=None):
     df.set_index('datetime', inplace=True)
     return df
 
-def get_ms(binance, sym, tf, limit, wins):
-    try:
-        df = past_data(binance, sym=sym, tf=tf, limit=limit)
-        m1 = df['close'].rolling(window=wins[0]).mean()
-        m2 =  df['close'].rolling(window=wins[1]).mean()
-        m3 = df['close'].rolling(window=wins[2]).mean()
-        m4 = df['close'].rolling(window=wins[3]).mean()
-    except Exception as e:
-        print(e)
-        m1, m2, m3, m4 = get_ms(binance, sym, tf, limit, wins)
-
-    return m1, m2, m3, m4
-
-
-def whether_calm(m1, ref=0.05, n=80):
-    m = m1[-n:]
-    li = []
-    for i in range(n-1):
-        pre = m[-(i+1)]
-        now = m[-i]
-        li.append(np.abs(now-pre)/pre*100)
-
-    print(np.mean(li), np.max(li), np.std(li))
-    if np.std(li) <= ref:
-        return True
-    elif np.std(li) > ref:
-        return False
     
 async def get_curr_pnl(sym):
     binance = get_binance()
@@ -93,158 +45,42 @@ async def get_curr_pnl(sym):
     return round(pnl,2), round(float(profit), 2)
 
 
-def timing_to_close(sym, max_loss, N):
+def timing_to_close(sym, max_loss, N, t, lev):
     curr_pnl, profit = asyncio.run(get_curr_pnl(sym.replace("/", "")))
-    print(f"\r{N}) [{sym.split('/')[0]}] PNL: {profit} ({pnlstr(round(curr_pnl, 1))})%\t", end="")
-    if curr_pnl < max_loss:
-        print(f"\n!!! max_loss: {curr_pnl}")
-        return True, curr_pnl
+    if curr_pnl != 0:
+        if curr_pnl < max_loss or (t > 25*60 and curr_pnl > 0.1*lev):
+            print(f"\n!!! Close: {curr_pnl}%")
+            return True, curr_pnl, profit
 
-    return False, curr_pnl
-
-def timing_to_position(binance, ms, sym, buying_cond, pre_cond, tf, limit, wins, pr=True):
-    # model_pred = timing_to_position_model(binance, sym)
-    rule_pred = short_mvmt_timing(binance, ms, sym, buying_cond, pre_cond, tf, limit, wins, pr=pr)
-    if rule_pred:
-        return rule_pred
-
-# def timing_to_position_model(binance, sym):
-#     return get_model_prediction(binance=binance, sym=sym)
+    return False, curr_pnl, profit
 
 
-def get_existing_positions():
-    with open("positions.txt", 'r') as f:
-        positions = f.read()
-    positions = eval(positions)
-    return positions
-
-def pop_from_existing_positions(status):
-    positions = get_existing_positions()
-    positions.pop(positions.index(status))
-    with open('positions.txt', 'w') as f:
-        f.write(str(positions))
-
-def add_to_existing_positions(status):
-    positions = get_existing_positions()
-    positions.append(status)
-    with open('positions.txt', 'w') as f:
-        f.write(str(positions))
+def trailing_stop(curr_pnl, tp, sl, famt=0.3):
+    if curr_pnl > tp:
+        tp += famt
+        sl += famt
+        return tp, sl
 
 
-def short_mvmt_timing(binance, ms, sym, buying_cond, pre_cond, tf, limit, wins, pr=True):
-    # 더 점수가 높다의 뜻?
+def get_running_syms():
+    with open("running_syms.txt", 'r') as f:
+        syms = f.read()
+    return eval(syms)
 
-    m1, m2, m3 , m4 = ms
+def pop_from_existing_positions(sym):
+    syms = get_running_syms()
+    syms.pop(syms.index(sym))
+    with open('running_syms.txt', 'w') as f:
+        f.write(str(syms))
 
-    curr_mvmt, amount = curr_movement(m1, minute=5)  # 5개 시간봉의 움직임
-    # small_shape = shape_info(m2)
-    ref = 0.9
-    
-    if pr:
-        print(f"[{sym[:-5]}] curr_mvmt:{curr_mvmt} amt: {amount}")
-        
-    if curr_mvmt == FALLING:
-        if amount < -ref:
-            return SHORT
-        elif amount > -ref:
-            return LONG   
-    elif curr_mvmt == RISING:
-        if amount > ref:
-            return LONG
-        elif amount < ref:
-            return SHORT
-    
-
-    # """
-    # 이 아래로는 지그재그일때만 해당
-    # """
-    # zigzag, zzdic = handle_zigzag(m1, hour=4, tf=float(tf[0]))
-    # if not zigzag:
-    #     return None
-    # if pr:
-    #     print(sym, zzdic['where_h'])
-    #     print(sym, zzdic['where_l']) 
-    
-    # curr_mvmt, curr_diff = curr_movement(m1, minute=3)
-    # curr_diff = np.abs(curr_diff)
-    
-    # # [큰 흐름] m3 (15개 이동평균선) 이 상승일때 롱, 하락이면 숏
-    # i = int(round(4*60/float(tf[0])))
-    # d_m3 = np.diff(m3)[-3:] # 두 번의 변화
-    # d_m4 = np.diff(m4[-i:]) # 4시간동안의 변화
-    # m4inc = np.sum(np.where(d_m4 > 0, 1, 0))/len(d_m4) > 0.8
-    # m4dec = np.sum(np.where(d_m4 < 0, 1, 0))/len(d_m4) > 0.8
-    
-    # increasing_N_shortly_decreased = np.all(d_m3 > 0) and curr_mvmt == FALLING
-    # decreasing_N_shortly_increased = np.all(d_m3 < 0) and curr_mvmt == RISING
-    
-    # """
-    # 상승하다가 잠깐 하락? 하락하다가 잠깐 상승
-    # """
-    # if increasing_N_shortly_decreased or decreasing_N_shortly_increased:
-    #     if mm1[-1] < -buying_cond:
-    #         if pr:
-    #             print("[CASE3] ", d_m3, curr_mvmt,  mm1[-1], -buying_cond, m4dec)
-    #         if m4dec:
-    #             return SHORT
-    #         else:
-    #             return LONG
-    #     elif mm1[-1] > buying_cond:
-    #         if pr:
-    #             print("[CASE4] ", d_m3, curr_mvmt,  mm1[-1] , buying_cond, m4inc)
-    #         if m4inc:
-    #             return LONG
-    #         else:
-    #             return SHORT
-        
-def shape_info(m, n=4):
-    # return 오목/볼록, 증가/감소
-    m = m[-n:]
-    d_m = np.diff(m)
-    dd_m = np.diff(d_m)
-    if np.all(d_m < 0):         # 감소
-        if np.all(dd_m < 0):    # 볼록
-            return DECREASING_CONVEX
-    elif np.all(d_m > 0):
-        if np.all(dd_m > 0):
-            return INCREASING_CONCAVE
-
-
-def curr_movement(m, minute=2, ref=0.02):
-    diff = []
-    m = m[-minute-1:]
-    for i in range(len(m)-1):
-        diff.append((m[i+1] - m[i])/m[i])
-    d = np.sum(diff)*100
-
-    if d > ref*minute/2:
-        return RISING, d
-    elif d < -ref*minute/2:
-        return FALLING, d
-    else:
-        return "~", d
-
-
-def isitsudden(m1, status, ref=0.085):
-    now = m1[-1]
-    prev = m1[-2]
-    percent = (now - prev)/prev*100
-    # print(percent, ref)
-    if status == LONG and percent > ref:
+def add_to_existing_positions(sym):
+    syms = get_running_syms()
+    if sym in syms:
         return True
-    elif status == SHORT and percent < -ref:
-        return True
-    return False
+    syms.append(sym)
+    with open('running_syms.txt', 'w') as f:
+        f.write(str(syms))
 
-
-def isit_wrong_position(m3, status, n=3):
-    # m3 은 상승(하락)하는데 SHORT(LONG) 포지션이다?!
-    d_m3 = np.diff(m3[-10:])[-n:]
-
-    if (np.all(d_m3 > 0) and status == SHORT) or\
-        (np.all(d_m3 < 0) and status == LONG):
-        return True
-    return False
 
 
 def log_wallet_history(balance):
@@ -267,91 +103,7 @@ def log_wallet_history(balance):
     plt.savefig("wallet_log.png")
     plt.close()
 
-
-def minmax(m):
-    m = (m - m.min())/(m.max() - m.min())
-    # 원래 0~1 사이인데, 그냥 -1~1로 하고싶음
-    m = 2*(m-0.5)
-    return m
-
-def inv_minmax(m, val):
-    original_val = (val/2+0.5)*(m.max() - m.min())+m.min()
-    return original_val
-
-
-# 지그재그인지 확인, w 또는 m, n&u&un은 안됨
-def handle_zigzag(m1, hour=2, tf=1):
-    # tf분봉으로 hour시간동안 0.9*max와 0.9*min에 몇번 도달했는지?
-    # 기준선들 각 2번 이상씩 찍으면 지그재그  (1,1)이면 상승 또는 하강, (2,1)이면 u또는 n
-    m1 = m1[-int(hour*60/tf):]
-    his_2h = minmax(m1)
-    ref_h, ref_l = 0.65, -0.65
-
-    where_h = np.where(his_2h>ref_h, 1, 0).reshape(-1, 2)                 # where_h: (40, 2)
-    where_l = np.where(his_2h<ref_l, 1, 0).reshape(-1, 2)
-
-    where_h = np.where(np.sum(where_h, axis=1) > 0, 1, 0).reshape(-1, 5)  # where_h: (40) -> (8, 5)
-    where_l = np.where(np.sum(where_l, axis=1) > 0, 1, 0).reshape(-1, 5)  # 연속적인거 카운트 안하기 위해
-
-    where_h = np.where(np.sum(where_h, axis=1) > 0, 1, 0)                 # where_h: (8)
-    where_l = np.where(np.sum(where_l, axis=1) > 0, 1, 0)
-
-    h_num, l_num = 0, 0
-    for i in range(len(where_h)-1):
-        h = [where_h[i], where_h[i+1]]
-        if h == [0, 1] or h == [1, 0]:
-            h_num += 0.5
-        l = [where_l[i], where_l[i+1]]
-        if l == [0, 1] or l == [1, 0]:
-            l_num += 0.5
-    # ####
-    # if len(where_h) < 10:
-    #     print(where_h, h_num)
-    #     print(where_l, l_num)
-    # ####
     
-    l = round(len(where_h)/2)
-    # print(np.sum(where_h[:l])*np.sum(where_l[:l])*np.sum(where_h[l:])*np.sum(where_l[l:]) )
-    if h_num >= 1.5 and l_num >= 1.5 and (np.sum(where_h[:l])*np.sum(where_l[:l])*np.sum(where_h[l:])*np.sum(where_l[l:]) > 0):
-        return True, {"zzmin":inv_minmax(m1, -(ref_l-0.2)), "zzmax":inv_minmax(m1, ref_h-0.2),
-                      "where_h":where_h, "where_l": where_l}
-    if h_num >= 1 and l_num >= 1 and (h_num+l_num >= 4):
-        return True, {"zzmin":inv_minmax(m1, -(ref_l-0.2)), "zzmax":inv_minmax(m1, ref_h-0.2),
-                      "where_h":where_h, "where_l": where_l}
-    return False, {}
-
-
-# def get_curr_cond(m, period=500):
-#     m = m[-period:]
-#     mm = minmax(m)
-#     return mm[-1]
-    
-def show_total_pnl(transactions):
-    pnls=[]
-    for tr in transactions:
-        pnls.append(float(tr['pnl'][:-1]))
-    total_pnl = np.sum(pnls)
-    return total_pnl
-
-
-def m4_turn(m4, ref=0.005):
-    i = -1
-    m4_inc1 = (m4[i-3] - m4[i-5])/m4[i-5]*100
-    m4_inc2 = (m4[i-4] - m4[i-6])/m4[i-6]*100
-    m4_inc3 = (m4[i-5] - m4[i-7])/m4[i-7]*100
-
-    m4_dec_now1 = (m4[i] - m4[i-1])/m4[i-1]*100
-    m4_dec_now2 = (m4[i-1] - m4[i-2])/m4[i-2]*100
-
-    # n
-    m4_increased = m4_inc1 >0 and m4_inc2 >ref and m4_inc3 >ref
-    if m4_increased and m4_dec_now1 < 0 and m4_dec_now2 < -ref:
-        return 'n'
-    # u
-    m4_decreased = m4_inc1 <0 and m4_inc2 < -ref and m4_inc3 < -ref
-    if m4_decreased and m4_dec_now1 > 0 and m4_dec_now2 > ref:
-        return 'u'
-
 
 def get_binance():
     with open("a.txt") as f:
