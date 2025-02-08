@@ -17,7 +17,7 @@ class Trader():
         self.other_running_sym_num = 0
         self.status = None
         self.lev = 2  # 0.04*lev 가 수수료
-        self.stoploss = -0.5*self.lev                     # 마이너스인거 확인
+        self.stoploss = -2*self.lev                     # 마이너스인거 확인
         self.tp = 2*self.lev   # 3 * 10
         self.limit_amt_ratio = 0.0003
         # self.famt = 0.5*self.lev
@@ -226,8 +226,8 @@ class Trader():
                     self.price_to_by = curr_price if self.res['curr_price1'] else self.res['ent_price1']
                     if self.res["stop_price1"]:
                         self.update_close_price = False
-                        self.stoploss = (self.res['stop_price1'] - curr_price)/self.res['stop_price1']*100
-                        self.tp = (self.res['close_price1'] - curr_price)/self.res['close_price1']*100
+                        self.stoploss = -np.abs(self.res['ent_price1'] - self.res['stop_price1'])/self.res['ent_price1']*100*self.lev
+                        self.tp = np.abs(self.res['ent_price1'] - self.res['close_price1'])/self.res['ent_price1']*100*self.lev
 
                 elif self.res["ent_price2"] and (curr_price <= self.res["ent_price2"] or self.res["curr_price2"]):
                     self.position_to_by = self.res["position2"]
@@ -235,8 +235,8 @@ class Trader():
                     self.price_to_by = curr_price if self.res['curr_price2'] else self.res['ent_price2']
                     if self.res["stop_price2"]:
                         self.update_close_price = False
-                        self.stoploss = (curr_price - self.res['stop_price2'])/self.res['stop_price2']*100
-                        self.tp = -(self.res['close_price2'] - curr_price)/self.res['close_price2']*100
+                        self.stoploss = -np.abs(self.res['ent_price2'] - self.res['stop_price2'])/self.res['ent_price2']*100*self.lev
+                        self.tp = np.abs(self.res['ent_price2'] - self.res['close_price2'])/self.res['ent_price2']*100*self.lev
                 
                 else:
                     continue
@@ -284,8 +284,8 @@ class Trader():
                         asyncio.run(self.cancel_order(self.close_order_id))
                         exit()
                 
-                if curr_pnl > 0.25*self.tp and self.stoploss < 0:
-                    self.stoploss = 0.2*self.lev
+                # if curr_pnl > 0.25*self.tp and self.stoploss < 0:
+                #     self.stoploss = 0.2*self.lev
                 ## tp & sl 
                 # if self.update_close_price:
                         

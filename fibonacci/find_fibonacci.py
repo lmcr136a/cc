@@ -63,7 +63,9 @@ async def find_fibonacci(sym, pnl, tf = "5m", limit = 150, n=5, imgfilename="rea
         ent_price1 = curr_price
         close_price1 = curr_price*(1+pnl)
         curr_price1 = True
-
+        # ent_price2 = curr_price
+        # close_price2 = curr_price*(1-pnl)
+        # curr_price2 = True
     elif np.argmin(df["low"]) in list(range(limit-3, limit)) or np.argmin(df["close"]) in list(range(limit-3, limit)):
         pattern = "Bear"
         ent_price2 = curr_price
