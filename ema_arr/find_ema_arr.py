@@ -38,10 +38,14 @@ async def find_ema_arrangement(sym, pnl, tf = "15m", limit = 60, n=5, imgfilenam
     pnl *= 0.01
     binance = get_binance()
     df = await past_data(binance, sym, tf, limit+n)
-    df['ema1'] = df['close'].rolling(window=5).mean()
-    df['ema2'] = df['close'].rolling(window=10).mean()
-    df['ema3'] = df['close'].rolling(window=15).mean()
-    df['ema4'] = df['close'].rolling(window=25).mean()
+    # df['ema1'] = df['close'].rolling(window=5).mean()
+    # df['ema2'] = df['close'].rolling(window=10).mean()
+    # df['ema3'] = df['close'].rolling(window=15).mean()
+    # df['ema4'] = df['close'].rolling(window=25).mean()
+    df['ema1'] = df['close'].ewm(5).mean()
+    df['ema2'] = df['close'].ewm(10).mean()
+    df['ema3'] = df['close'].ewm(15).mean()
+    df['ema4'] = df['close'].ewm(25).mean()
     df['ema12'] = df['ema1']-df['ema2']
     df['ema23'] = df['ema2']-df['ema3']
     df['ema34'] = df['ema3']-df['ema4']
@@ -116,11 +120,13 @@ async def find_ema_arrangement(sym, pnl, tf = "15m", limit = 60, n=5, imgfilenam
     ema1, ema2, ema3, ema4 = df["ema1"].iloc[curr_idx], df["ema2"].iloc[curr_idx], df["ema3"].iloc[curr_idx], df["ema4"].iloc[curr_idx]
     
     if np.abs(ema4 - ema3) > ref_gap and np.abs(ema2 - ema1) > ref_gap and\
-       (min(ema1, ema3)-0.01*curr_price < curr_price < max(ema1, ema3)+0.01*curr_price):
+       (min(ema1, ema3)-np.abs(ema1-ema2) < curr_price < max(ema1, ema3)+np.abs(ema1-ema2)):
         if np.max([i_dcross34, i_dcross23, i_dcross12]) < i_ucross12 and i_ucross12 <= i_ucross23 and i_ucross23 <= i_ucross34 and limit-ref_i < i_ucross34:
 
             if ema1 < curr_price:
                 ent_price1 = ema1
+            elif ema2 < curr_price:
+                ent_price1 = ema2
             elif ema3 < curr_price:
                 ent_price1 = ema3
                 
@@ -132,6 +138,8 @@ async def find_ema_arrangement(sym, pnl, tf = "15m", limit = 60, n=5, imgfilenam
         if np.max([i_ucross34, i_ucross23, i_ucross12]) < i_dcross12 and i_dcross12 <= i_dcross23 and i_dcross23 <= i_dcross34 and limit-ref_i < i_dcross34:
             if ema1 > curr_price:
                 ent_price2 = ema1
+            elif ema2 > curr_price:
+                ent_price2 = ema2
             elif ema3 > curr_price:
                 ent_price2 = ema3
             

@@ -226,7 +226,7 @@ class Trader():
                     self.price_to_by = curr_price if self.res['curr_price1'] else self.res['ent_price1']
                     if self.res["stop_price1"]:
                         self.update_close_price = False
-                        self.stoploss = -np.abs(self.res['ent_price1'] - self.res['stop_price1'])/self.res['ent_price1']*100*self.lev
+                        self.stoploss = max(-np.abs(self.res['ent_price1'] - self.res['stop_price1'])/self.res['ent_price1']*100*self.lev, self.stoploss)
                         self.tp = np.abs(self.res['ent_price1'] - self.res['close_price1'])/self.res['ent_price1']*100*self.lev
 
                 elif self.res["ent_price2"] and (curr_price <= self.res["ent_price2"] or self.res["curr_price2"]):
@@ -235,7 +235,7 @@ class Trader():
                     self.price_to_by = curr_price if self.res['curr_price2'] else self.res['ent_price2']
                     if self.res["stop_price2"]:
                         self.update_close_price = False
-                        self.stoploss = -np.abs(self.res['ent_price2'] - self.res['stop_price2'])/self.res['ent_price2']*100*self.lev
+                        self.stoploss = max(-np.abs(self.res['ent_price2'] - self.res['stop_price2'])/self.res['ent_price2']*100*self.lev, self.stoploss)
                         self.tp = np.abs(self.res['ent_price2'] - self.res['close_price2'])/self.res['ent_price2']*100*self.lev
                 
                 else:
