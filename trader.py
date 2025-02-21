@@ -16,7 +16,7 @@ class Trader():
         self.other_running_sym_num = 0
         self.status = None
         self.lev = 2  # 0.04*lev 가 수수료
-        self.stoploss = -5*self.lev                     # 마이너스인거 확인
+        self.sl = -5*self.lev                     # 마이너스인거 확인
         self.tp = 1*self.lev   # min_pnl로 쓰임
         self.limit_amt_ratio = 0.0003
         # self.famt = 0.5*self.lev
@@ -41,7 +41,7 @@ class Trader():
                 pass
             else: 
                 self.close_order_id = asyncio.run(self.get_open_order_id())
-        print(f"{'*'*50}\nwallet:{round(self.wallet_usdt, 3)}  lev:{self.lev} stop loss: {self.stoploss}")
+        print(f"{'*'*50}\nwallet:{round(self.wallet_usdt, 3)}  lev:{self.lev} stop loss: {self.sl}")
 
     
     async def get_open_order_id(self,):
@@ -187,13 +187,13 @@ class Trader():
             entry_price = await self.prep_order()
         if self.status == LONG:
             close_side = "sell"
-            # self.close_price = entry_price*(1+self.takeprofit*0.01/self.lev)
+            # self.tp_price = entry_price*(1+self.takeprofit*0.01/self.lev)
         elif self.status == SHORT:
             close_side = "buy"
-            # self.close_price = entry_price*(1-self.takeprofit*0.01/self.lev)
+            # self.tp_price = entry_price*(1-self.takeprofit*0.01/self.lev)
             
         close_order = await self.binance.create_order(
-            symbol=self.sym, type="limit", side=close_side, amount=np.abs(self.amount), price=self.close_price)
+            symbol=self.sym, type="limit", side=close_side, amount=np.abs(self.amount), price=self.tp_price)
         self.close_order_id = close_order['id']
         await self.binance.close()
         
@@ -206,8 +206,8 @@ class Trader():
 
     def run(self):
         iter = 0
-        self.update_close_price = True
-        self.t_update_close_price = 0
+        self.update_tp_price = False
+        self.t_update_tp_price = 0
         self.anxious = 1
         self.pre_pnls = []
         self.missed_timing = 0
@@ -221,35 +221,23 @@ class Trader():
 
                 if self.res["ent_price1"] and (curr_price >= self.res["ent_price1"] or self.res["curr_price1"]):
                     self.position_to_by = self.res["position1"]
-                    self.close_price = self.res["close_price1"]
+                    self.tp_price = self.res["tp_price1"]
                     self.price_to_by = curr_price if self.res['curr_price1'] else self.res['ent_price1']
-                    if self.res["stop_price1"]:
-                        self.update_close_price = False
-                        self.stoploss = max(-np.abs(self.res['ent_price1'] - self.res['stop_price1'])/self.res['ent_price1']*100*self.lev, self.stoploss)
-                        self.tp = np.abs(self.res['ent_price1'] - self.res['close_price1'])/self.res['ent_price1']*100*self.lev
+                    self.sl = (self.res['sl_price1'] - self.res['ent_price1'])/self.res['ent_price1']*100*self.lev
+                    self.tp = (self.res['tp_price1'] - self.res['ent_price1'])/self.res['ent_price1']*100*self.lev
 
                 elif self.res["ent_price2"] and (curr_price <= self.res["ent_price2"] or self.res["curr_price2"]):
                     self.position_to_by = self.res["position2"]
-                    self.close_price = self.res["close_price2"]
+                    self.tp_price = self.res["tp_price2"]
                     self.price_to_by = curr_price if self.res['curr_price2'] else self.res['ent_price2']
-                    if self.res["stop_price2"]:
-                        self.update_close_price = False
-                        self.stoploss = max(-np.abs(self.res['ent_price2'] - self.res['stop_price2'])/self.res['ent_price2']*100*self.lev, self.stoploss)
-                        self.tp = np.abs(self.res['ent_price2'] - self.res['close_price2'])/self.res['ent_price2']*100*self.lev
+                    self.sl = -(self.res['sl_price2'] - self.res['ent_price2'])/self.res['ent_price2']*100*self.lev
+                    self.tp = -(self.res['tp_price2'] - self.res['ent_price2'])/self.res['ent_price2']*100*self.lev
                 
                 else:
                     continue
                 
                 self.status = self.position_to_by
-
                 asyncio.run(self.open_order())
-
-                # if not self.status:
-                #     self.missed_timing += 1
-                # if self.missed_timing > 25*60/self.time_interval:
-                #     return self.sym
-
-                # self.res = asyncio.run(find_wedge(self.sym, imgfilename="minion"+str(self.N)))
                 
             else :
                 curr_amt = asyncio.run(self.get_curr_sym_amt())
@@ -262,47 +250,53 @@ class Trader():
                         except:
                             pass
                     
-                    if abs(curr_amt) > 0 and self.init_amt == 0:  # open limit close order
-                        asyncio.run(self.close_limit_order())
+                    # if abs(curr_amt) > 0 and self.init_amt == 0:  # open limit close order
+                    #     asyncio.run(self.close_limit_order())
 
-                else:
-                    if abs(curr_amt) == 0:
-                        print("Take profit limit order filled ! ")
-                        return self.sym, "TP"
+                # else:
+                #     if abs(curr_amt) == 0:
+                #         print("Take profit limit order filled ! ")
+                #         return self.sym, "TP"
                     
                 curr_pnl, profit = asyncio.run(get_curr_pnl(self.sym.replace("/", "")))
-                close_position, stop_price = timing_to_close(sym=self.sym, position=self.status)
+                tp_price, sl_price, tp_close, sl_close = timing_to_close(sym=self.sym, position=self.status, imgfilename=f"minion{self.N}")
+                
                 if self.status == LONG:
-                    self.stoploss = max(-(self.price_to_by - stop_price)/self.price_to_by*100*self.lev, self.stoploss)
+                    self.sl = (sl_price - self.price_to_by)/self.price_to_by*100*self.lev
+                    self.tp = (tp_price - self.price_to_by)/self.price_to_by*100*self.lev
                 else:
-                    self.stoploss = max((self.price_to_by - stop_price)/self.price_to_by*100*self.lev, self.stoploss)
+                    self.sl = -(sl_price - self.price_to_by)/self.price_to_by*100*self.lev
+                    self.tp = -(tp_price - sself.price_to_by)/self.price_to_by100*self.lev
                 self.pre_pnls.append(curr_pnl)
                 
-                if close_position:
+                if tp_close or sl_close:
                     try:
                         asyncio.run(self.close_market_order())
-                        asyncio.run(self.cancel_order(self.close_order_id))
-                        return self.sym, "SL"  # finish the iteration
+                        # asyncio.run(self.cancel_order(self.close_order_id))
+                        if tp_close:
+                            return self.sym, "TP"  # finish the iteration
+                        else:
+                            return self.sym, "SL"  # finish the iteration
                     except Exception as error:
                         print("When close market order error occurred:")
                         print(error)
                         asyncio.run(self.close_market_order())
-                        asyncio.run(self.cancel_order(self.close_order_id))
+                        # asyncio.run(self.cancel_order(self.close_order_id))
                         exit()
                 
-                # if curr_pnl > 0.25*self.tp and self.stoploss < 0:
-                #     self.stoploss = 0.2*self.lev
+                # if curr_pnl > 0.25*self.tp and self.sl < 0:
+                #     self.sl = 0.2*self.lev
                 ## tp & sl 
-                # if self.update_close_price:
+                # if self.update_tp_price:
                         
-                    # newtpsl = trailing_stop(curr_pnl, tp=self.tp, sl=self.stoploss, famt=self.famt)
+                    # newtpsl = trailing_stop(curr_pnl, tp=self.tp, sl=self.sl, famt=self.famt)
                     # if newtpsl:
-                    #     self.tp, self.stoploss = newtpsl[0], newtpsl[1]
-                    #     self.t_update_close_price = 0
+                    #     self.tp, self.sl = newtpsl[0], newtpsl[1]
+                    #     self.t_update_tp_price = 0
                         # if self.status == LONG:
-                        #     self.close_price = self.price_to_by*(1+0.01*self.tp/self.lev)
+                        #     self.tp_price = self.price_to_by*(1+0.01*self.tp/self.lev)
                         # else:
-                        #     self.close_price = self.price_to_by*(1-0.01*self.tp/self.lev)
+                        #     self.tp_price = self.price_to_by*(1-0.01*self.tp/self.lev)
                             
                         # try:
                         #     resp = asyncio.run(self.cancel_order(self.close_order_id))
@@ -310,8 +304,8 @@ class Trader():
                         #     print("position already closed")
                         #     return self.sym
                         # asyncio.run(self.close_limit_order())
-                print(f"\r{self.N}[{self.sym.split('/')[0]}_{status_str(self.status)}]_PNL:{profit}({pnlstr(round(curr_pnl, 2))})__SL:{pnlstr(round(self.stoploss, 2))}_TP:{pnlstr(round(self.tp, 2))}__{round(self.t_update_close_price*self.time_interval/60)}min  ", end="")
-                self.t_update_close_price += 1                    
+                print(f"\r{self.N}[{self.sym.split('/')[0]}_{status_str(self.status)}]_PNL:{profit}({pnlstr(round(curr_pnl, 2))})__SL:{pnlstr(round(self.sl, 2))}_TP:{pnlstr(round(self.tp, 2))}__{round(self.t_update_tp_price*self.time_interval/60)}min  ", end="")
+                self.t_update_tp_price += 1                    
                 
 
             time.sleep(self.time_interval)
