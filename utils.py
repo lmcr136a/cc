@@ -45,14 +45,14 @@ async def get_curr_pnl(sym):
     return round(pnl,2), round(float(profit), 2)
 
 
-def timing_to_close(sym, max_loss, N, t, lev):
-    curr_pnl, profit = asyncio.run(get_curr_pnl(sym.replace("/", "")))
-    if curr_pnl != 0:
-        if curr_pnl < max_loss or (t > 25*60 and curr_pnl > 0.1*lev):
-            print(f"\n!!! Close: {curr_pnl}%")
-            return True, curr_pnl, profit
+# def timing_to_close(sym, max_loss, N, t, lev):
+#     curr_pnl, profit = asyncio.run(get_curr_pnl(sym.replace("/", "")))
+#     if curr_pnl != 0:
+#         if curr_pnl < max_loss:# or (t > 25*60 and curr_pnl > 0.1*lev):
+#             print(f"\n!!! Close: {curr_pnl}%")
+#             return True, curr_pnl, profit
 
-    return False, curr_pnl, profit
+#     return False, curr_pnl, profit
 
 
 def trailing_stop(curr_pnl, tp, sl, famt=0.3):

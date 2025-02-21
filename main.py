@@ -2,6 +2,8 @@ import importlib
 import argparse
 import trader   # 파일 수정 반영
 import time
+import os
+import datetime
 import asyncio
 from utils import pop_from_existing_positions
 """
@@ -39,7 +41,10 @@ if __name__ == "__main__":
             minion = trader.Trader(sym, args.number)
             if minion.this_sym_is_running:
                 continue
-            before_sym = minion.run()
+            before_sym, res = minion.run()
+            now = datetime.datetime.now()
+            now = now.strftime("%m%d_%H%M%S")
+            os.rename(f"Figures/minion{args.number}.jpg", f"logs/{now}_{res}.jpg")
             sym = None
             if not args.re_execution:
                 break

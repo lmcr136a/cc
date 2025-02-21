@@ -5,7 +5,7 @@ from fibonacci.find_fibonacci import find_fibonacci
 from utils import *
 pd.set_option('mode.chained_assignment',  None)
 
-async def select_sym(N, pnl):
+async def select_sym(N, tp):
     binance = get_binance()
     print(y("\nSEARCHING..."))
     return_pos = None
@@ -23,7 +23,7 @@ async def select_sym(N, pnl):
         for i, sym in enumerate(symlist):  # 0705 0.55초 걸
             if sym in ["USDC/USDT", "BTC/USDT"]:
                 continue
-            # sym = 'SCR/USDT'
+            # sym = 'BANANA/USDT'
             try:
                 vol = await binance.fetch_tickers(symbols=[sym])
                 time.sleep(1)
@@ -34,7 +34,7 @@ async def select_sym(N, pnl):
                     continue
                 
                 print(f"[{i}/{len(symlist)}]", sym)
-                res = await find_ema_arrangement(sym, pnl, imgfilename="minion"+str(N))
+                res = await find_ema_arrangement(sym, tp, imgfilename="minion"+str(N))
                 # res = await find_wedge(sym, pnl, imgfilename="minion"+str(N))
                 # if not res:
                 # res = await find_heikin(sym, imgfilename="minion"+str(N))

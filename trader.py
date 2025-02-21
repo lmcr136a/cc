@@ -4,9 +4,8 @@ import time
 import utils
 from utils import *
 from select_sym import select_sym
+from ema_arr.find_ema_arr import timing_to_close
 import asyncio
-from wedge_analysis.wedge_analysis import find_wedge
-from heikin_ashi.find_heikin import find_heikin
 """
 1.2
 """
@@ -17,8 +16,8 @@ class Trader():
         self.other_running_sym_num = 0
         self.status = None
         self.lev = 2  # 0.04*lev 가 수수료
-        self.stoploss = -2*self.lev                     # 마이너스인거 확인
-        self.tp = 2*self.lev   # 3 * 10
+        self.stoploss = -5*self.lev                     # 마이너스인거 확인
+        self.tp = 1*self.lev   # min_pnl로 쓰임
         self.limit_amt_ratio = 0.0003
         # self.famt = 0.5*self.lev
         # self.gap = 0# *self.lev
@@ -256,9 +255,12 @@ class Trader():
                 curr_amt = asyncio.run(self.get_curr_sym_amt())
                 
                 if not self.close_order_id:
-                    if len(self.pre_pnls) > 3*60/self.time_interval and not curr_amt:  # limit order 안사짐
-                        asyncio.run(self.cancel_order(self.order_id))
-                        return self.sym 
+                    if len(self.pre_pnls) > 5*60/self.time_interval and not curr_amt:  # limit order 안사짐
+                        try:
+                            asyncio.run(self.cancel_order(self.order_id))
+                            return self.sym, "X_buy"
+                        except:
+                            pass
                     
                     if abs(curr_amt) > 0 and self.init_amt == 0:  # open limit close order
                         asyncio.run(self.close_limit_order())
@@ -266,17 +268,21 @@ class Trader():
                 else:
                     if abs(curr_amt) == 0:
                         print("Take profit limit order filled ! ")
-                        return self.sym
+                        return self.sym, "TP"
                     
-                close_position, curr_pnl, profit = timing_to_close(sym=self.sym, max_loss=self.stoploss, N=self.N, t=self.t_update_close_price*self.time_interval, lev=self.lev)
-                
+                curr_pnl, profit = asyncio.run(get_curr_pnl(self.sym.replace("/", "")))
+                close_position, stop_price = timing_to_close(sym=self.sym, position=self.status)
+                if self.status == LONG:
+                    self.stoploss = max(-(self.price_to_by - stop_price)/self.price_to_by*100*self.lev, self.stoploss)
+                else:
+                    self.stoploss = max((self.price_to_by - stop_price)/self.price_to_by*100*self.lev, self.stoploss)
                 self.pre_pnls.append(curr_pnl)
                 
                 if close_position:
                     try:
                         asyncio.run(self.close_market_order())
                         asyncio.run(self.cancel_order(self.close_order_id))
-                        return self.sym  # finish the iteration
+                        return self.sym, "SL"  # finish the iteration
                     except Exception as error:
                         print("When close market order error occurred:")
                         print(error)
@@ -304,7 +310,7 @@ class Trader():
                         #     print("position already closed")
                         #     return self.sym
                         # asyncio.run(self.close_limit_order())
-                print(f"\r{self.N})_[{self.sym.split('/')[0]}_{status_str(self.status)}]_PNL:{profit}({pnlstr(round(curr_pnl, 2))})%__SL:{pnlstr(round(self.stoploss, 2))}_TP:{pnlstr(round(self.tp, 2))}__{round(self.t_update_close_price*self.time_interval/60)}min  ", end="")
+                print(f"\r{self.N}[{self.sym.split('/')[0]}_{status_str(self.status)}]_PNL:{profit}({pnlstr(round(curr_pnl, 2))})__SL:{pnlstr(round(self.stoploss, 2))}_TP:{pnlstr(round(self.tp, 2))}__{round(self.t_update_close_price*self.time_interval/60)}min  ", end="")
                 self.t_update_close_price += 1                    
                 
 
