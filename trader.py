@@ -270,19 +270,12 @@ class Trader():
                 self.pre_pnls.append(curr_pnl)
                 
                 if tp_close or sl_close:
-                    try:
-                        asyncio.run(self.close_market_order())
-                        # asyncio.run(self.cancel_order(self.close_order_id))
-                        if tp_close:
-                            return self.sym, "TP"  # finish the iteration
-                        else:
-                            return self.sym, "SL"  # finish the iteration
-                    except Exception as error:
-                        print("When close market order error occurred:")
-                        print(error)
-                        asyncio.run(self.close_market_order())
-                        # asyncio.run(self.cancel_order(self.close_order_id))
-                        exit()
+                    asyncio.run(self.close_market_order())
+                    # asyncio.run(self.cancel_order(self.close_order_id))
+                    if tp_close:
+                        return self.sym, "TP"  # finish the iteration
+                    else:
+                        return self.sym, "SL"  # finish the iteration
                 
                 # if curr_pnl > 0.25*self.tp and self.sl < 0:
                 #     self.sl = 0.2*self.lev

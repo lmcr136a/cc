@@ -44,7 +44,8 @@ if __name__ == "__main__":
             before_sym, res = minion.run()
             now = datetime.datetime.now()
             now = now.strftime("%m%d_%H%M%S")
-            os.rename(f"Figures/minion{args.number}.jpg", f"logs/{now}_{res}.jpg")
+            if res in ["TP", "SL"]:
+                os.rename(f"Figures/minion{args.number}.jpg", f"logs/{now}_{res}.jpg")
             sym = None
             if not args.re_execution:
                 break
