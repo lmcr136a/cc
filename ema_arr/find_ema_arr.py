@@ -83,7 +83,7 @@ async def find_ema_arrangement(sym, pnl, tf = "15m", limit = 60, n=5, imgfilenam
         RED2, ORANGE2, YELLOW2 = (0.9, 0.3, 0, 1), (0.9, 0.7, 0, 1), (0.6, 0.9, 0, 1)
         plt.rcParams["figure.figsize"] = (6,4)
         f, ax = plt.subplots(1,1)
-        ax.set_facecolor((0.9, 0.9, 0.85))
+        ax.set_facecolor((0.95, 0.95, 0.9))
         plt.subplots_adjust(top = 0.9, bottom = 0.05, right = 0.98, left = 0.1, 
                     hspace = 0.4, wspace = 0.4)
         ax.plot(df["Index"], df["ema1"], color=RED)
@@ -118,13 +118,13 @@ async def find_ema_arrangement(sym, pnl, tf = "15m", limit = 60, n=5, imgfilenam
             i_dcross34 = i
             
     ref_i = 15
-    ema1, ema2, ema3, ema4 = df["ema1"].iloc[curr_idx], df["ema2"].iloc[curr_idx], df["ema3"].iloc[curr_idx], df["ema4"].iloc[curr_idx]
+    ema1, ema2, ema4 = df["ema1"].iloc[curr_idx], df["ema2"].iloc[curr_idx], df["ema4"].iloc[curr_idx]
     gap12 = np.abs(ema1 - ema2)
     
     if (curr_price - ema4)/curr_price > 0.01:
         if ema2 < curr_price < ema1 + gap12 and 0 < i_ucross12:
-            ema1s = df["ema1"].iloc[-i_ucross12:] - df["ema1"].iloc[-i_ucross12-1:-1]
-            if np.all(ema1s > 0) and\
+            ema1s = np.array(df["ema1"].iloc[i_ucross12+1:]) - np.array(df["ema1"].iloc[i_ucross12:-1])
+            if np.all(ema1s > 0) and df["ema5"].iloc[curr_idx] > df["ema5"].iloc[curr_idx-1] and\
             np.max([i_dcross34, i_dcross23, i_dcross12]) < i_ucross12 and i_ucross12 <= i_ucross23 and i_ucross23 <= i_ucross34 and limit-ref_i < i_ucross34:
 
                 if ema1 < curr_price:
@@ -139,8 +139,8 @@ async def find_ema_arrangement(sym, pnl, tf = "15m", limit = 60, n=5, imgfilenam
                     tp_price1 = ema1 + gap12
                     
         if ema1 - gap12 < curr_price < ema2 and 0 < i_dcross12:
-            ema1s = df["ema1"].iloc[-i_dcross12:] - df["ema1"].iloc[-i_dcross12-1:-1]
-            if np.all(ema1s < 0) and \
+            ema1s = np.array(df["ema1"].iloc[i_dcross12+1:]) - np.array(df["ema1"].iloc[i_dcross12:-1])
+            if np.all(ema1s < 0) and df["ema5"].iloc[curr_idx] < df["ema5"].iloc[curr_idx-1] and \
                 np.max([i_ucross34, i_ucross23, i_ucross12]) < i_dcross12 and i_dcross12 <= i_dcross23 and i_dcross23 <= i_dcross34 and limit-ref_i < i_dcross34:
                 if ema1 > curr_price:
                     ent_price2 = ema1
@@ -228,10 +228,10 @@ async def timing_to_close(sym, position, ent_price, sl_price, tp_price, tf = "15
         ax.scatter(df["Index"], df["cross34_u"], color=YELLOW2, marker="^", s=markersize, zorder=5)
         
         ax.set_title(f"{position} - {sym}, {tf}", position = (0.5,1.05),fontsize = 18)
-        
-        ax.axhline(ent_price, color=BUY_COLOR, alpha = 0.6, s=50, marker="s")
-        ax.axhline(sl_price, color=BUY_COLOR, alpha = 0.6, s=50, marker="x")
-        ax.axhline(tp_price, color=BUY_COLOR, alpha = 0.6, s=50, marker="*")
+        pcol = BUY_COLOR if position == LONG else SELL_COLOR
+        ax.axhline(ent_price, color=pcol)
+        ax.axhline(sl_price, color=SELL_COLOR, ls="--")
+        ax.axhline(tp_price, color=BUY_COLOR, ls="-")
             
         os.makedirs("Figures/", exist_ok=True)
         plt.savefig(f"Figures/{imgfilename}.jpg", dpi = 300)
@@ -256,6 +256,5 @@ async def timing_to_close(sym, position, ent_price, sl_price, tp_price, tf = "15
             tp_close = True
         elif curr_price > sl_price:
             sl_close = True
-
     
     return tp_price, sl_price, tp_close, sl_close

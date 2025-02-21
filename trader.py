@@ -15,7 +15,7 @@ class Trader():
         self.init_amt = 0
         self.other_running_sym_num = 0
         self.status = None
-        self.lev = 2  # 0.04*lev 가 수수료
+        self.lev = 1  # 0.04*lev 가 수수료
         self.sl = -5*self.lev                     # 마이너스인거 확인
         self.tp = 1*self.lev   # min_pnl로 쓰임
         self.limit_amt_ratio = 0.0003
@@ -217,8 +217,6 @@ class Trader():
             if not self.status:
                 curr_price = asyncio.run(self.get_curr_price())
                 
-                # print(f'\r{self.N}) [{self.sym.split("/")[0]}] {self.res["ent_price2"]} < Current price: {curr_price} < {self.res["ent_price1"]}', end="")
-
                 if self.res["ent_price1"] and (curr_price >= self.res["ent_price1"] or self.res["curr_price1"]):
                     self.position_to_by = self.res["position1"]
                     self.tp_price = self.res["tp_price1"]
@@ -266,7 +264,7 @@ class Trader():
                     self.tp = (tp_price - self.price_to_by)/self.price_to_by*100*self.lev
                 else:
                     self.sl = -(sl_price - self.price_to_by)/self.price_to_by*100*self.lev
-                    self.tp = -(tp_price - sself.price_to_by)/self.price_to_by100*self.lev
+                    self.tp = -(tp_price - self.price_to_by)/self.price_to_by*100*self.lev
                 self.pre_pnls.append(curr_pnl)
                 
                 if tp_close or sl_close:
@@ -277,26 +275,6 @@ class Trader():
                     else:
                         return self.sym, "SL"  # finish the iteration
                 
-                # if curr_pnl > 0.25*self.tp and self.sl < 0:
-                #     self.sl = 0.2*self.lev
-                ## tp & sl 
-                # if self.update_tp_price:
-                        
-                    # newtpsl = trailing_stop(curr_pnl, tp=self.tp, sl=self.sl, famt=self.famt)
-                    # if newtpsl:
-                    #     self.tp, self.sl = newtpsl[0], newtpsl[1]
-                    #     self.t_update_tp_price = 0
-                        # if self.status == LONG:
-                        #     self.tp_price = self.price_to_by*(1+0.01*self.tp/self.lev)
-                        # else:
-                        #     self.tp_price = self.price_to_by*(1-0.01*self.tp/self.lev)
-                            
-                        # try:
-                        #     resp = asyncio.run(self.cancel_order(self.close_order_id))
-                        # except:
-                        #     print("position already closed")
-                        #     return self.sym
-                        # asyncio.run(self.close_limit_order())
                 print(f"\r{self.N}[{self.sym.split('/')[0]}_{status_str(self.status)}]_PNL:{profit}({pnlstr(round(curr_pnl, 2))})__SL:{pnlstr(round(self.sl, 2))}_TP:{pnlstr(round(self.tp, 2))}__{round(self.t_update_tp_price*self.time_interval/60)}min  ", end="")
                 self.t_update_tp_price += 1                    
                 

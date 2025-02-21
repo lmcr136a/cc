@@ -15,7 +15,7 @@ import ccxt.pro as ccxtpro
 # def cal_compound_amt(wallet_usdt, lev, price, symnum):
 #     return float(wallet_usdt*lev/float(price)*0.9/float(symnum))
 def cal_compound_amt(lev, price):
-    return float(4*lev/float(price))
+    return float(10*lev/float(price))
 
 
 async def past_data(binance, sym, tf, limit, since=None):
