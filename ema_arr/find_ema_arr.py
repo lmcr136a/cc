@@ -60,7 +60,7 @@ def add_emas(df):
     
 
 
-async def find_ema_arrangement(sym, pnl, tf = "15m", limit = 60, n=5, imgfilename="realtime", decided_res=None):
+async def find_ema_arrangement(sym, pnl, tf = "15m", limit = 60, n=1500, imgfilename="realtime", decided_res=None):
     pnl *= 0.01
     binance = get_binance()
     df = await past_data(binance, sym, tf, limit+n)
@@ -119,12 +119,13 @@ async def find_ema_arrangement(sym, pnl, tf = "15m", limit = 60, n=5, imgfilenam
             
     ref_i = 15
     ema1, ema2, ema4 = df["ema1"].iloc[curr_idx], df["ema2"].iloc[curr_idx], df["ema4"].iloc[curr_idx]
-    gap12 = np.abs(ema1 - ema2)
+    gap12 = np.abs(ema1 - ema2)*1.5
+    avg_candle_length = np.mean(np.abs(np.array(df["high"]) - np.array(df["low"])))
     
-    if (curr_price - ema4)/curr_price > 0.01:
+    if np.abs(curr_price - ema4) > avg_candle_length:
         if ema2 < curr_price < ema1 + gap12 and 0 < i_ucross12:
             ema1s = np.array(df["ema1"].iloc[i_ucross12+1:]) - np.array(df["ema1"].iloc[i_ucross12:-1])
-            if np.all(ema1s > 0) and df["ema5"].iloc[curr_idx] > df["ema5"].iloc[curr_idx-1] and\
+            if np.all(ema1s > -avg_candle_length*0.05) and df["ema5"].iloc[curr_idx] > df["ema5"].iloc[curr_idx-1] and\
             np.max([i_dcross34, i_dcross23, i_dcross12]) < i_ucross12 and i_ucross12 <= i_ucross23 and i_ucross23 <= i_ucross34 and limit-ref_i < i_ucross34:
 
                 if ema1 < curr_price:
@@ -140,7 +141,7 @@ async def find_ema_arrangement(sym, pnl, tf = "15m", limit = 60, n=5, imgfilenam
                     
         if ema1 - gap12 < curr_price < ema2 and 0 < i_dcross12:
             ema1s = np.array(df["ema1"].iloc[i_dcross12+1:]) - np.array(df["ema1"].iloc[i_dcross12:-1])
-            if np.all(ema1s < 0) and df["ema5"].iloc[curr_idx] < df["ema5"].iloc[curr_idx-1] and \
+            if np.all(ema1s < avg_candle_length*0.05) and df["ema5"].iloc[curr_idx] < df["ema5"].iloc[curr_idx-1] and \
                 np.max([i_ucross34, i_ucross23, i_ucross12]) < i_dcross12 and i_dcross12 <= i_dcross23 and i_dcross23 <= i_dcross34 and limit-ref_i < i_dcross34:
                 if ema1 > curr_price:
                     ent_price2 = ema1
@@ -190,7 +191,7 @@ async def find_ema_arrangement(sym, pnl, tf = "15m", limit = 60, n=5, imgfilenam
     
     
 
-async def timing_to_close(sym, position, ent_price, sl_price, tp_price, tf = "15m", limit = 60, n=5, imgfilename="realtime", decided_res=None):
+async def tracking(sym, position, ent_price, sl_price, tp_price, open_to_buy_more, tf = "15m", limit = 60, n=5, imgfilename="realtime", decided_res=None):
     binance = get_binance()
     df = await past_data(binance, sym, tf, limit+n)
     df = add_emas(df)
@@ -231,7 +232,7 @@ async def timing_to_close(sym, position, ent_price, sl_price, tp_price, tf = "15
         pcol = BUY_COLOR if position == LONG else SELL_COLOR
         ax.axhline(ent_price, color=pcol)
         ax.axhline(sl_price, color=SELL_COLOR, ls="--")
-        ax.axhline(tp_price, color=BUY_COLOR, ls="-")
+        ax.axhline(tp_price, color=BUY_COLOR, ls="-.")
             
         os.makedirs("Figures/", exist_ok=True)
         plt.savefig(f"Figures/{imgfilename}.jpg", dpi = 300)
@@ -239,22 +240,28 @@ async def timing_to_close(sym, position, ent_price, sl_price, tp_price, tf = "15
         
             
     ema1, ema2, ema3, ema4 = df["ema1"].iloc[curr_idx], df["ema2"].iloc[curr_idx], df["ema3"].iloc[curr_idx], df["ema4"].iloc[curr_idx]
-    gap12 = np.abs(ema1 - ema2)
+    gap12 = np.abs(ema1 - ema2)*1.5
     
     sl_close, tp_close = False, False
+    buy_more = False
+    
     if position == LONG:
-        tp_price = ema1 + gap12
+        tp_price = ent_price + gap12
         sl_price = ema4
         if tp_price < curr_price:
             tp_close = True
         elif curr_price < sl_price:
             sl_close = True
+        elif ema3 < curr_price < np.mean([ema2, ema3]) and open_to_buy_more:
+            buy_more = curr_price
     else:
-        tp_price = ema1 - gap12
+        tp_price = ent_price - gap12
         sl_price = ema4
         if tp_price > curr_price:
             tp_close = True
         elif curr_price > sl_price:
             sl_close = True
+        elif ema3 > curr_price > np.mean([ema2, ema3]) and open_to_buy_more:
+            buy_more = curr_price
     
-    return tp_price, sl_price, tp_close, sl_close
+    return tp_price, sl_price, tp_close, sl_close, buy_more

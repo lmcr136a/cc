@@ -23,7 +23,7 @@ async def select_sym(N, tp):
         for i, sym in enumerate(symlist):  # 0705 0.55초 걸
             if sym in ["USDC/USDT", "BTC/USDT"]:
                 continue
-            sym = 'BANANA/USDT'
+            # sym = 'ICP/USDT'
             try:
                 vol = await binance.fetch_tickers(symbols=[sym])
                 time.sleep(1)
@@ -44,7 +44,7 @@ async def select_sym(N, tp):
                     print(res)
                     return sym, res
                 
-            except BadSymbol: 
+            except BadSymbol:
                 symlist.pop(i)
                 continue
         with open("symlist.txt", "w") as f:
