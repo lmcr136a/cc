@@ -4,23 +4,21 @@ import time
 import utils
 from utils import *
 from select_sym import select_sym
-from ema_arr.find_ema_arr import tracking
+from ema_arr.find_ema_arr import tracking, find_ema_arrangement
 import asyncio
-"""
-1.2
-"""
+
+
+
 class Trader():
     def __init__(self, symbol=None, number=1) -> None:
         self.N = int(number)
         self.init_amt = 0
         self.other_running_sym_num = 0
         self.status = None
-        self.lev = 4  # 0.04*lev 가 수수료
-        self.sl = -5*self.lev                     # 마이너스인거 확인
-        self.tp = 1*self.lev   # min_pnl로 쓰임
+        self.lev = 2                # 0.04*lev 가 수수료
+        self.sl = -5*self.lev       # 마이너스인거 확인 & 지금 안쓰임
+        self.tp = 1*self.lev        # 지금 안쓰임
         self.limit_amt_ratio = 0.0003
-        # self.famt = 0.5*self.lev
-        # self.gap = 0# *self.lev
         
         self.already_running = False
         if not symbol:
@@ -215,6 +213,7 @@ class Trader():
         await self.binance.close()
         return response
 
+
     def run(self):
         iter = 0
         self.pre_pnls = []
@@ -225,7 +224,6 @@ class Trader():
             
             if not self.status:
                 curr_price = asyncio.run(self.get_curr_price())
-                
                 if self.res["ent_price1"] and (curr_price >= self.res["ent_price1"] or self.res["curr_price1"]):
                     self.position_to_by = self.res["position1"]
                     self.tp_price = self.res["tp_price1"]
@@ -251,14 +249,12 @@ class Trader():
             else :
                 curr_amt = asyncio.run(self.get_curr_sym_amt())
                 
-                if not self.close_order_id:
-                    if self.t > 5*60/self.time_interval and not curr_amt:  # limit order 안사짐
-                        try:
-                            asyncio.run(self.cancel_order(self.order_id))
-                            return self.sym, "X_buy"
-                        except:
-                            pass
-                    
+                if not curr_amt:
+                    res = asyncio.run(find_ema_arrangement(self.sym, self.tp, imgfilename=f"minion{self.N}"))
+                    if not res or self.t > 5*60/self.time_interval:  # limit order 안사짐
+                        asyncio.run(self.cancel_order(self.order_id))
+                        return self.sym, "X_buy"
+                        
                     # if abs(curr_amt) > 0 and self.init_amt == 0:  # open limit close order
                     #     asyncio.run(self.close_limit_order())
 
@@ -266,7 +262,7 @@ class Trader():
                 #     if abs(curr_amt) == 0:
                 #         print("Take profit limit order filled ! ")
                 #         return self.sym, "TP"
-                if curr_amt:
+                elif curr_amt:
                     curr_pnl, profit = asyncio.run(get_curr_pnl(self.sym.replace("/", "")))
                     self.tp_price, self.sl_price, tp_close, sl_close, buy_more = asyncio.run(tracking(sym=self.sym, ent_price=self.ent_price, sl_price=self.sl_price, tp_price=self.tp_price, open_to_buy_more=open_to_buy_more, position=self.status, imgfilename=f"minion{self.N}"))
                     

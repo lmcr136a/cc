@@ -100,7 +100,6 @@ async def find_ema_arrangement(sym, pnl, tf = "15m", limit = 60, n=1500, imgfile
         ax.scatter(df["Index"], df["cross34_d"], color=YELLOW2, marker="v", s=markersize, zorder=5)
         ax.scatter(df["Index"], df["cross34_u"], color=YELLOW2, marker="^", s=markersize, zorder=5)
         
-        
     i_ucross12, i_ucross23, i_ucross34 = -1, -1, -1
     i_dcross12, i_dcross23, i_dcross34 = -1, -1, -1
     for i in range(curr_idx):
@@ -117,15 +116,15 @@ async def find_ema_arrangement(sym, pnl, tf = "15m", limit = 60, n=1500, imgfile
         if df["cross34_d"].iloc[i] > 0:
             i_dcross34 = i
             
-    ref_i = 15
+    ref_i = 10
     ema1, ema2, ema4 = df["ema1"].iloc[curr_idx], df["ema2"].iloc[curr_idx], df["ema4"].iloc[curr_idx]
     gap12 = np.abs(ema1 - ema2)*1.5
-    avg_candle_length = np.mean(np.abs(np.array(df["high"]) - np.array(df["low"])))
+    avg_candle_length = np.mean(np.abs(np.array(df["open"]) - np.array(df["close"])))
     
     if np.abs(curr_price - ema4) > avg_candle_length:
         if ema2 < curr_price < ema1 + gap12 and 0 < i_ucross12:
             ema1s = np.array(df["ema1"].iloc[i_ucross12+1:]) - np.array(df["ema1"].iloc[i_ucross12:-1])
-            if np.all(ema1s > -avg_candle_length*0.05) and df["ema5"].iloc[curr_idx] > df["ema5"].iloc[curr_idx-1] and\
+            if np.all(ema1s > -avg_candle_length*0.05) and\
             np.max([i_dcross34, i_dcross23, i_dcross12]) < i_ucross12 and i_ucross12 <= i_ucross23 and i_ucross23 <= i_ucross34 and limit-ref_i < i_ucross34:
 
                 if ema1 < curr_price:
@@ -141,7 +140,7 @@ async def find_ema_arrangement(sym, pnl, tf = "15m", limit = 60, n=1500, imgfile
                     
         if ema1 - gap12 < curr_price < ema2 and 0 < i_dcross12:
             ema1s = np.array(df["ema1"].iloc[i_dcross12+1:]) - np.array(df["ema1"].iloc[i_dcross12:-1])
-            if np.all(ema1s < avg_candle_length*0.05) and df["ema5"].iloc[curr_idx] < df["ema5"].iloc[curr_idx-1] and \
+            if np.all(ema1s < avg_candle_length*0.05) and \
                 np.max([i_ucross34, i_ucross23, i_ucross12]) < i_dcross12 and i_dcross12 <= i_dcross23 and i_dcross23 <= i_dcross34 and limit-ref_i < i_dcross34:
                 if ema1 > curr_price:
                     ent_price2 = ema1
@@ -153,7 +152,6 @@ async def find_ema_arrangement(sym, pnl, tf = "15m", limit = 60, n=1500, imgfile
                     pattern = "Desending Arrangement"
                     sl_price2 = ema4
                     tp_price2 = ema1 - gap12
-                    
         
     if plot:
         ax.set_title(f"{pattern} - {sym}, {tf}", position = (0.5,1.05),fontsize = 18)
@@ -195,9 +193,7 @@ async def tracking(sym, position, ent_price, sl_price, tp_price, open_to_buy_mor
     binance = get_binance()
     df = await past_data(binance, sym, tf, limit+n)
     df = add_emas(df)
-    
     df = df.iloc[-limit:]
-
     await binance.close()
     
     curr_idx = len(df["close"])-1
@@ -238,17 +234,15 @@ async def tracking(sym, position, ent_price, sl_price, tp_price, open_to_buy_mor
         plt.savefig(f"Figures/{imgfilename}.jpg", dpi = 300)
         plt.close()
         
-            
     ema1, ema2, ema3, ema4 = df["ema1"].iloc[curr_idx], df["ema2"].iloc[curr_idx], df["ema3"].iloc[curr_idx], df["ema4"].iloc[curr_idx]
     gap12 = np.abs(ema1 - ema2)*1.5
     
     sl_close, tp_close = False, False
     buy_more = False
-    
+    sl_price = ema4
     if position == LONG:
         tp_price = ent_price + gap12
-        sl_price = ema4
-        if tp_price < curr_price:
+        if curr_price > tp_price:
             tp_close = True
         elif curr_price < sl_price:
             sl_close = True
@@ -256,8 +250,7 @@ async def tracking(sym, position, ent_price, sl_price, tp_price, open_to_buy_mor
             buy_more = curr_price
     else:
         tp_price = ent_price - gap12
-        sl_price = ema4
-        if tp_price > curr_price:
+        if curr_price < tp_price:
             tp_close = True
         elif curr_price > sl_price:
             sl_close = True
