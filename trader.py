@@ -250,8 +250,8 @@ class Trader():
                 curr_amt = asyncio.run(self.get_curr_sym_amt())
                 
                 if not curr_amt:
-                    res = asyncio.run(find_ema_arrangement(self.sym, self.tp, imgfilename=f"minion{self.N}"))
-                    if not res or self.t > 5*60/self.time_interval:  # limit order 안사짐
+                    # res = asyncio.run(find_ema_arrangement(self.sym, self.tp, imgfilename=f"minion{self.N}"))
+                    if self.t > 10*60/self.time_interval:  # limit order 안사짐
                         asyncio.run(self.cancel_order(self.order_id))
                         return self.sym, "X_buy"
                         
@@ -281,11 +281,11 @@ class Trader():
                             return self.sym, "TP"  # finish the iteration
                         else:
                             return self.sym, "SL"  # finish the iteration
-                    elif buy_more:
-                        asyncio.run(self.open_market_order())
-                        open_to_buy_more = False
-                        self.amount *= 2
-                        self.ent_price = np.mean([self.ent_price, buy_more])
+                    # elif buy_more:
+                    #     asyncio.run(self.open_market_order())
+                    #     open_to_buy_more = False
+                    #     self.amount = np.abs(float(curr_amt))
+                    #     self.ent_price = np.mean([self.ent_price, buy_more])
                 
                     print(f"\r{self.N}[{self.sym.split('/')[0]}_{status_str(self.status)}]_PNL:{profit}({pnlstr(round(curr_pnl, 2))})__SL:{pnlstr(round(self.sl, 2))}_TP:{pnlstr(round(self.tp, 2))}__{round(self.t*self.time_interval/60)}min  ", end="")
                 else:

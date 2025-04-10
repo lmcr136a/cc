@@ -23,13 +23,13 @@ async def select_sym(N, tp):
         for i, sym in enumerate(symlist):  # 0705 0.55초 걸
             if sym in ["USDC/USDT", "BTC/USDT"]:
                 continue
-            # sym = 'INJ/USDT'
+            # sym = 'RIF/USDT'
             try:
                 vol = await binance.fetch_tickers(symbols=[sym])
                 time.sleep(1)
                 await binance.close()
                     
-                if (not len(list(vol.values())) > 0) or list(vol.values())[0]['quoteVolume'] < 1*(10**7):
+                if (not len(list(vol.values())) > 0) or list(vol.values())[0]['quoteVolume'] < 1*(10**6):
                     symlist.pop(i)
                     continue
                 
