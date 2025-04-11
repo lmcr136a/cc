@@ -149,7 +149,7 @@ class Trader():
             raise
         await binance.close()
         print()
-        print(f"SUBMITTING ORDER [{self.sym}] price:{price}")
+        print(f"SUBMITTIED ORDER [{self.sym}] price:{price}")
         return price
 
     async def open_order(self):
@@ -251,7 +251,9 @@ class Trader():
                 
                 if not curr_amt:
                     # res = asyncio.run(find_ema_arrangement(self.sym, self.tp, imgfilename=f"minion{self.N}"))
-                    if self.t > 10*60/self.time_interval:  # limit order 안사짐
+                    max_waiting = 5*60/self.time_interval
+                    print(f"\rWaiting.. {self.t} / {max_waiting}", end="")
+                    if self.t > max_waiting:  # limit order 안사짐
                         asyncio.run(self.cancel_order(self.order_id))
                         return self.sym, "X_buy"
                         
@@ -278,8 +280,10 @@ class Trader():
                         asyncio.run(self.close_market_order())
                         # asyncio.run(self.cancel_order(self.close_order_id))
                         if tp_close:
+                            print("===Take Profit===")
                             return self.sym, "TP"  # finish the iteration
                         else:
+                            print("===Stop Loss===")
                             return self.sym, "SL"  # finish the iteration
                     # elif buy_more:
                     #     asyncio.run(self.open_market_order())
