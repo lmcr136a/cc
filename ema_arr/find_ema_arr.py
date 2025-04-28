@@ -121,11 +121,11 @@ async def find_ema_arrangement(sym, pnl, tf = "15m", limit = 60, imgfilename="re
         if df["cross34_d"].iloc[i] > 0:
             i_dcross34 = i
             num_all_cross += 1
-            
-    ref_i, ref_other_i = 20, 5
+    
+    ref_i, ref_other_i = 40, 10
     ema1, ema2, ema3, ema4 = df["ema1"].iloc[curr_idx], df["ema2"].iloc[curr_idx], df["ema3"].iloc[curr_idx], df["ema4"].iloc[curr_idx]
     avg_candle_length = np.mean(np.abs(np.array(df["open"]) - np.array(df["close"])))
-    gap = np.abs(ema1 - ema2) + avg_candle_length
+    gap = 0.6*(np.abs(ema1 - ema2) + avg_candle_length)
     
     def arranged_triangles(i_dcross12, i_dcross23, i_dcross34, i_ucross12, i_ucross23, i_ucross34, ref_other_i):  # for long, opposite arguments for short position
         if 0 < i_ucross12 and limit-ref_i < i_ucross34:
@@ -139,7 +139,7 @@ async def find_ema_arrangement(sym, pnl, tf = "15m", limit = 60, imgfilename="re
             ema1s = np.array(df["ema1"].iloc[i_ref+1:]) - np.array(df["ema1"].iloc[i_ref:-1])
             if np.all(ema1s*p > -avg_candle_length*0.05):
                 return True
-            if (df["ema1"].iloc[-1] - df["ema1"].iloc[i_ref])*p > 2*avg_candle_length:
+            if (df["ema1"].iloc[-1] - df["ema1"].iloc[i_ref])*p > 3*avg_candle_length:
                 return True
         print("\t| not smooth or enough ")
         
@@ -154,10 +154,10 @@ async def find_ema_arrangement(sym, pnl, tf = "15m", limit = 60, imgfilename="re
         print("\t| not enough rainbow")
         
     def not_zigzag(num_all_cross):
-        if num_all_cross <= 8:
+        if num_all_cross <= 10:
             return True
         print("\t| zigzag")
-            
+    
     if enough_rainbow(curr_price, ema4, avg_candle_length) and not_zigzag(num_all_cross):
         if right_timing_curr_price(ema2, curr_price, ema1 + 2*avg_candle_length) and \
            smooth_or_enough(df, i_ucross34, avg_candle_length, LONG) and\
@@ -236,7 +236,7 @@ async def tracking(sym, position, ent_price, sl_price, tp_price, open_to_buy_mor
     
     ema1, ema2, ema3, ema4 = df["ema1"].iloc[curr_idx], df["ema2"].iloc[curr_idx], df["ema3"].iloc[curr_idx], df["ema4"].iloc[curr_idx]
     avg_candle_length = np.mean(np.abs(np.array(df["open"]) - np.array(df["close"])))
-    gap = np.abs(ema1 - ema2) + avg_candle_length
+    gap = 0.6*(np.abs(ema1 - ema2) + avg_candle_length)
     
     sl_close, tp_close = False, False
     buy_more = False
