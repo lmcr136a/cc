@@ -60,7 +60,7 @@ def add_emas(df):
     
 
 
-async def find_ema_arrangement(sym, pnl, tf = "15m", limit = 60, imgfilename="realtime", decided_res=None):
+async def find_ema_arrangement_opposite(sym, pnl, tf = "15m", limit = 60, imgfilename="realtime", decided_res=None):
     pnl *= 0.01
     binance = get_binance()
     df = await past_data(binance, sym, tf, limit)
@@ -137,67 +137,54 @@ async def find_ema_arrangement(sym, pnl, tf = "15m", limit = 60, imgfilename="re
         p = 1 if pos == LONG else -1
         if i_ref > 0:
             ema1s = np.array(df["ema1"].iloc[i_ref+1:]) - np.array(df["ema1"].iloc[i_ref:-1])
-            if np.all(ema1s*p > -avg_candle_length*0.05):
+            if not np.all(ema1s*p > -avg_candle_length*0.05):
                 return True
             if (df["ema1"].iloc[-1] - df["ema1"].iloc[i_ref])*p > 3*avg_candle_length:
                 return True
         print("\t| not smooth or enough ")
-        
-    def right_timing_curr_price(min_price, curr_price, max_price):
-        if min_price < curr_price < max_price:
-            return True
-        print("\t| not right timing")
     
     def enough_rainbow(curr_price, ema4, avg_candle_length):
         if np.abs(curr_price - ema4) > avg_candle_length:
             return True
         print("\t| not enough rainbow")
         
-    def not_zigzag(num_all_cross):
-        if num_all_cross <= 10:
+    def zigzag(num_all_cross):
+        if num_all_cross > 5:
             return True
-        print("\t| zigzag")
+        print("\t| not zigzag")
         
-    def same_direction_ema1(ema1, position):
-        last_ema1_mvmt = ema1.iloc[-1] - ema1.iloc[-2]
-        p = 1 if position == LONG else -1
-        last_ema1_mvmt *= p
-        if last_ema1_mvmt > 0:
-            return True
-        print("\t| ema1 direction")
-    
-    if enough_rainbow(curr_price, ema4, avg_candle_length) and not_zigzag(num_all_cross):
-        if right_timing_curr_price(ema2, curr_price, ema1 + 2*avg_candle_length) and \
-           smooth_or_enough(df, i_ucross34, avg_candle_length, LONG) and\
-           arranged_triangles(i_dcross12, i_dcross23, i_dcross34, i_ucross12, i_ucross23, i_ucross34, ref_other_i) and \
-           same_direction_ema1(df["ema1"], LONG):
+        
+    if enough_rainbow(curr_price, ema4, avg_candle_length) and zigzag(num_all_cross):
+        if smooth_or_enough(df, i_ucross34, avg_candle_length, LONG) and\
+           arranged_triangles(i_dcross12, i_dcross23, i_dcross34, i_ucross12, i_ucross23, i_ucross34, ref_other_i):
             if ema1 < curr_price:
-                ent_price1 = np.mean([ema1, curr_price])
-            elif ema2 < curr_price:
-                ent_price1 = curr_price
-                curr_price = True
-                
-            if ent_price1:
-                pattern = "Ascending Arrangement"
-                sl_price1 = ema4
-                tp_price1 = ema1 + gap
-                    
-        if right_timing_curr_price(ema1 - 2*avg_candle_length, curr_price, ema2) and \
-           smooth_or_enough(df, i_dcross34, avg_candle_length, SHORT) and \
-           arranged_triangles(i_ucross12, i_ucross23, i_ucross34, i_dcross12, i_dcross23, i_dcross34, ref_other_i) and \
-           same_direction_ema1(df["ema1"], SHORT):
-            if ema1 > curr_price:
-                ent_price1 = np.mean([ema1, curr_price])
-                # ent_price2 = ema1
-            elif ema2 > curr_price:
                 ent_price2 = curr_price
                 curr_price = True
+
+            # elif ema2 < curr_price < ema1:
+            #     ent_price2 = curr_price
+            #     curr_price = True
             
             if ent_price2:
-                pattern = "Desending Arrangement"
-                sl_price2 = ema4
-                tp_price2 = ema1 - gap
+                pattern = "Ascending Arrangement - will go down"
+                sl_price2 = ema1 + gap
+                tp_price2 = ema4
+               
+        if smooth_or_enough(df, i_dcross34, avg_candle_length, SHORT) and \
+           arranged_triangles(i_ucross12, i_ucross23, i_ucross34, i_dcross12, i_dcross23, i_dcross34, ref_other_i):
     
+            if ema1 > curr_price:
+                ent_price1 = curr_price
+                curr_price = True
+            # elif ema2 < curr_price:
+            #     ent_price1 = curr_price
+            #     curr_price = True
+                
+            if ent_price1:
+                pattern = "desending Arrangement - will go up"
+                sl_price1 = ema1 - gap
+                tp_price1 = ema4
+                
     if plot:
         ax.set_title(f"{pattern} - {sym}, {tf}", position = (0.5,1.05),fontsize = 18)
         
@@ -251,23 +238,20 @@ async def tracking(sym, position, ent_price, sl_price, tp_price, open_to_buy_mor
     
     sl_close, tp_close = False, False
     buy_more = False
-    sl_price = ema4
     if position == LONG:
-        tp_price = max(ema1, ent_price) + gap
+        tp_price = max(ema4, ent_price + gap)
+        sl_price = min(ema1, ent_price) - gap
         if curr_price > tp_price:
             tp_close = True
         elif curr_price < sl_price:
             sl_close = True
-        elif ema3 < curr_price < np.mean([ema2, ema3]) and open_to_buy_more:
-            buy_more = curr_price
     else:
-        tp_price = min(ema1, ent_price) - gap
+        tp_price = min(ema4, ent_price - gap)
+        sl_price = max(ema1, ent_price) + gap
         if curr_price < tp_price:
             tp_close = True
         elif curr_price > sl_price:
             sl_close = True
-        elif ema3 > curr_price > np.mean([ema2, ema3]) and open_to_buy_more:
-            buy_more = curr_price
             
     ## Plot
     plot=True

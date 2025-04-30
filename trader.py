@@ -4,7 +4,8 @@ import time
 import utils
 from utils import *
 from select_sym import select_sym
-from ema_arr.find_ema_arr import tracking, find_ema_arrangement
+# from ema_arr.find_ema_arr import tracking, 
+from ema_arr.find_ema_arr_opposite import tracking
 import asyncio
 
 
