@@ -4,8 +4,8 @@ import time
 import utils
 from utils import *
 from select_sym import select_sym
-# from ema_arr.find_ema_arr import tracking, 
-from ema_arr.find_ema_arr_opposite import tracking
+from ema_arr.find_ema_arr import tracking
+# from ema_arr.find_ema_arr_opposite import tracking
 import asyncio
 
 
@@ -242,6 +242,14 @@ class Trader():
                     self.tp = -(self.res['tp_price2'] - self.res['ent_price2'])/self.res['ent_price2']*100*self.lev
                 
                 else:
+                    max_waiting = 5*60/self.time_interval
+                    print(f"\rWaiting.. {self.t} / {max_waiting}", end="")
+                    if self.t > max_waiting:  
+                        asyncio.run(self.cancel_order(self.order_id))
+                        return self.sym, "X_buy"
+                    
+                    self.t += 1 
+                    time.sleep(self.time_interval)
                     continue
                 
                 self.status = self.position_to_by
@@ -295,7 +303,7 @@ class Trader():
                     print(f"\r{self.N}[{self.sym.split('/')[0]}_{status_str(self.status)}]_PNL:{profit}({pnlstr(round(curr_pnl, 2))})__SL:{pnlstr(round(self.sl, 2))}_TP:{pnlstr(round(self.tp, 2))}__{round(self.t*self.time_interval/60)}min  ", end="")
                 else:
                     print(f"\r{self.N}[{self.sym.split('/')[0]}_{status_str(self.status)}]_Waiting__SL:{pnlstr(round(self.sl, 2))}_TP:{pnlstr(round(self.tp, 2))}__{round(self.t*self.time_interval/60)}min  ", end="")
-                self.t += 1
+                self.t += 1 
 
             time.sleep(self.time_interval)
             iter += 1

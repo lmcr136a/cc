@@ -5,6 +5,10 @@ from HYPERPARAMETERS import *
 pd.set_option('mode.chained_assignment',  None)
 
 
+TF = "3m"
+GAP_CORR = 0.8
+
+
 def get_cross_points(col, i, n=3):
     t_list = [i+x for x in range(-n, 1)]
     
@@ -38,7 +42,7 @@ def add_emas(df):
     df['ema1'] = df['close'].ewm(span=5, adjust=False).mean()
     df['ema2'] = df['close'].ewm(span=10, adjust=False).mean()
     df['ema3'] = df['close'].ewm(span=15, adjust=False).mean()
-    df['ema4'] = df['close'].ewm(span=25, adjust=False).mean()
+    df['ema4'] = df['close'].ewm(span=22, adjust=False).mean()
     df['ema5'] = df['close'].ewm(span=25*4, adjust=False).mean()
     df['ema12'] = df['ema1']-df['ema2']
     df['ema23'] = df['ema2']-df['ema3']
@@ -60,8 +64,7 @@ def add_emas(df):
     
 
 
-async def find_ema_arrangement(sym, pnl, tf = "15m", limit = 60, imgfilename="realtime", decided_res=None):
-    pnl *= 0.01
+async def find_ema_arrangement(sym, pnl, tf = TF, limit = 60, imgfilename="realtime", decided_res=None):
     binance = get_binance()
     df = await past_data(binance, sym, tf, limit)
     df = add_emas(df)
@@ -99,37 +102,30 @@ async def find_ema_arrangement(sym, pnl, tf = "15m", limit = 60, imgfilename="re
         ax.scatter(df["Index"], df["cross34_d"], color=YELLOW2, marker="v", s=markersize, zorder=5)
         ax.scatter(df["Index"], df["cross34_u"], color=YELLOW2, marker="^", s=markersize, zorder=5)
         
-    i_ucross12, i_ucross23, i_ucross34 = -1, -1, -1
-    i_dcross12, i_dcross23, i_dcross34 = -1, -1, -1
-    num_all_cross = 0
+    i_ucross12, i_ucross23, i_ucross34 = [-1], [-1], [-1]
+    i_dcross12, i_dcross23, i_dcross34 = [-1], [-1], [-1]
     for i in range(curr_idx):
         if df["cross12_u"].iloc[i] > 0:
-            i_ucross12 = i
-            num_all_cross += 1
+            i_ucross12.append(i)
         if df["cross23_u"].iloc[i] > 0:
-            i_ucross23 = i
-            num_all_cross += 1
+            i_ucross23.append(i)
         if df["cross34_u"].iloc[i] > 0:
-            i_ucross34 = i
-            num_all_cross += 1
+            i_ucross34.append(i)
         if df["cross12_d"].iloc[i] > 0:
-            i_dcross12 = i
-            num_all_cross += 1
+            i_dcross12.append(i)
         if df["cross23_d"].iloc[i] > 0:
-            i_dcross23 = i
-            num_all_cross += 1
+            i_dcross23.append(i)
         if df["cross34_d"].iloc[i] > 0:
-            i_dcross34 = i
-            num_all_cross += 1
+            i_dcross34.append(i)
     
-    ref_i, ref_other_i = 40, 10
+    ref_i, ref_other_i = 20, 20
     ema1, ema2, ema3, ema4 = df["ema1"].iloc[curr_idx], df["ema2"].iloc[curr_idx], df["ema3"].iloc[curr_idx], df["ema4"].iloc[curr_idx]
     avg_candle_length = np.mean(np.abs(np.array(df["open"]) - np.array(df["close"])))
-    gap = 1.0*(np.abs(ema1 - ema2) + avg_candle_length)
+    gap = GAP_CORR*(np.abs(ema1 - ema2) + avg_candle_length)
     
     def arranged_triangles(i_dcross12, i_dcross23, i_dcross34, i_ucross12, i_ucross23, i_ucross34, ref_other_i):  # for long, opposite arguments for short position
-        if 0 < i_ucross12 and limit-ref_i < i_ucross34:
-            if np.max([i_dcross34, i_dcross23, i_dcross12]) < i_ucross12-ref_other_i and i_ucross12 <= i_ucross23 and i_ucross23 <= i_ucross34:
+        if 0 < i_ucross12[-1] and 0 < i_ucross23[-1] and limit-ref_i < i_ucross34[-1]:
+            if np.max([i_dcross34[-1], i_dcross23[-1], i_dcross12[-1], i_ucross12[-2], i_ucross23[-2], i_ucross34[-2]]) < i_ucross12[-1]-ref_other_i and i_ucross12[-1] <= i_ucross23[-1] and i_ucross23[-1] <= i_ucross34[-1]:
                 return True
         print("\t| not arranged triangles ")
         
@@ -148,56 +144,38 @@ async def find_ema_arrangement(sym, pnl, tf = "15m", limit = 60, imgfilename="re
             return True
         print("\t| not right timing")
     
-    def enough_rainbow(curr_price, ema4, avg_candle_length):
-        if np.abs(curr_price - ema4) > avg_candle_length:
+    def enough_rainbow(ema1, ema4, avg_candle_length, curr_price):
+        if np.abs(ema1 - ema4) > 0.8*avg_candle_length or np.abs(curr_price - ema1) > avg_candle_length:
             return True
         print("\t| not enough rainbow")
         
     def not_zigzag(num_all_cross):
-        if num_all_cross <= 10:
+        if num_all_cross <= 9:
             return True
         print("\t| zigzag")
         
-    def same_direction_ema1(ema1, position):
-        last_ema1_mvmt = ema1.iloc[-1] - ema1.iloc[-2]
-        p = 1 if position == LONG else -1
-        last_ema1_mvmt *= p
-        if last_ema1_mvmt > 0:
-            return True
-        print("\t| ema1 direction")
     
-    if enough_rainbow(curr_price, ema4, avg_candle_length) and not_zigzag(num_all_cross):
-        if right_timing_curr_price(ema2, curr_price, ema1 + 2*avg_candle_length) and \
-           smooth_or_enough(df, i_ucross34, avg_candle_length, LONG) and\
-           arranged_triangles(i_dcross12, i_dcross23, i_dcross34, i_ucross12, i_ucross23, i_ucross34, ref_other_i) and \
-           same_direction_ema1(df["ema1"], LONG):
+    if enough_rainbow(ema1, ema4, avg_candle_length, curr_price): # and not_zigzag(num_all_cross):
+        if smooth_or_enough(df, i_ucross34[-1], avg_candle_length, LONG) and\
+           arranged_triangles(i_dcross12, i_dcross23, i_dcross34, i_ucross12, i_ucross23, i_ucross34, ref_other_i):
             if ema1 < curr_price:
-                ent_price1 = np.mean([ema1, curr_price])
-            elif ema2 < curr_price:
-                ent_price1 = curr_price
-                curr_price = True
+                ent_price1 = np.mean([curr_price, ema1])
                 
             if ent_price1:
                 pattern = "Ascending Arrangement"
-                sl_price1 = ema4
-                tp_price1 = ema1 + gap
+                tp_price1 = max(ema1, ent_price1 + gap)
+                sl_price1 = min(ema1, ent_price1) - gap
                     
-        if right_timing_curr_price(ema1 - 2*avg_candle_length, curr_price, ema2) and \
-           smooth_or_enough(df, i_dcross34, avg_candle_length, SHORT) and \
-           arranged_triangles(i_ucross12, i_ucross23, i_ucross34, i_dcross12, i_dcross23, i_dcross34, ref_other_i) and \
-           same_direction_ema1(df["ema1"], SHORT):
+        if smooth_or_enough(df, i_dcross34[-1], avg_candle_length, SHORT) and \
+           arranged_triangles(i_ucross12, i_ucross23, i_ucross34, i_dcross12, i_dcross23, i_dcross34, ref_other_i):
             if ema1 > curr_price:
-                ent_price1 = np.mean([ema1, curr_price])
-                # ent_price2 = ema1
-            elif ema2 > curr_price:
-                ent_price2 = curr_price
-                curr_price = True
+                ent_price2 = np.mean([curr_price, ema1])# - 0.1*gap
             
             if ent_price2:
                 pattern = "Desending Arrangement"
-                sl_price2 = ema4
-                tp_price2 = ema1 - gap
-    
+                tp_price2 = min(ema1, ent_price2 - gap)
+                sl_price2 = max(ema1, ent_price2) + gap
+                
     if plot:
         ax.set_title(f"{pattern} - {sym}, {tf}", position = (0.5,1.05),fontsize = 18)
         
@@ -234,7 +212,7 @@ async def find_ema_arrangement(sym, pnl, tf = "15m", limit = 60, imgfilename="re
     
     
 
-async def tracking(sym, position, ent_price, sl_price, tp_price, open_to_buy_more, tf = "15m", limit = 60, n=5, imgfilename="realtime", decided_res=None):
+async def tracking(sym, position, ent_price, sl_price, tp_price, open_to_buy_more, tf = TF, limit = 60, n=5, imgfilename="realtime", decided_res=None):
     binance = get_binance()
     df = await past_data(binance, sym, tf, limit+n)
     df = add_emas(df)
@@ -247,27 +225,28 @@ async def tracking(sym, position, ent_price, sl_price, tp_price, open_to_buy_mor
     
     ema1, ema2, ema3, ema4 = df["ema1"].iloc[curr_idx], df["ema2"].iloc[curr_idx], df["ema3"].iloc[curr_idx], df["ema4"].iloc[curr_idx]
     avg_candle_length = np.mean(np.abs(np.array(df["open"]) - np.array(df["close"])))
-    gap = 1.0*(np.abs(ema1 - ema2) + avg_candle_length)
+    gap = GAP_CORR*(np.abs(ema1 - ema2) + avg_candle_length)
     
     sl_close, tp_close = False, False
     buy_more = False
-    sl_price = ema4
     if position == LONG:
         tp_price = max(ema1, ent_price) + gap
+        sl_price = min(ema1, ent_price) - gap
         if curr_price > tp_price:
             tp_close = True
         elif curr_price < sl_price:
             sl_close = True
-        elif ema3 < curr_price < np.mean([ema2, ema3]) and open_to_buy_more:
-            buy_more = curr_price
+        # elif ema3 < curr_price < np.mean([ema2, ema3]) and open_to_buy_more:
+        #     buy_more = curr_price
     else:
         tp_price = min(ema1, ent_price) - gap
+        sl_price = max(ema1, ent_price) + gap
         if curr_price < tp_price:
             tp_close = True
         elif curr_price > sl_price:
             sl_close = True
-        elif ema3 > curr_price > np.mean([ema2, ema3]) and open_to_buy_more:
-            buy_more = curr_price
+        # elif ema3 > curr_price > np.mean([ema2, ema3]) and open_to_buy_more:
+        #     buy_more = curr_price
             
     ## Plot
     plot=True

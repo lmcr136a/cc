@@ -1,7 +1,7 @@
 from wedge_analysis.wedge_analysis import *
 from heikin_ashi.find_heikin import find_heikin
 from ema_arr.find_ema_arr import find_ema_arrangement
-from ema_arr.find_ema_arr_opposite import find_ema_arrangement_opposite
+# from ema_arr.find_ema_arr_opposite import find_ema_arrangement_opposite
 from fibonacci.find_fibonacci import find_fibonacci
 from utils import *
 pd.set_option('mode.chained_assignment',  None)
@@ -35,7 +35,7 @@ async def select_sym(N, tp):
                     continue
                 
                 print(f"[{i}/{len(symlist)}]", sym)
-                res = await find_ema_arrangement_opposite(sym, tp, imgfilename="minion"+str(N))
+                res = await find_ema_arrangement(sym, tp, imgfilename="minion"+str(N))
                 # res = await find_wedge(sym, pnl, imgfilename="minion"+str(N))
                 # if not res:
                 # res = await find_heikin(sym, imgfilename="minion"+str(N))
