@@ -15,19 +15,51 @@ import ccxt.pro as ccxtpro
 # def cal_compound_amt(wallet_usdt, lev, price, symnum):
 #     return float(wallet_usdt*lev/float(price)*0.9/float(symnum))
 def cal_compound_amt(lev, price):
-    return float(5*lev/float(price))
+    return float(10*lev/float(price))
 
 
-async def past_data(binance, sym, tf, limit, since=None):
+async def past_data(sym, tf, limit, since=None):
+    binance = get_binance()
     coininfo = await binance.fetch_ohlcv(symbol=sym, 
         timeframe=tf, since=since, limit=limit)
 
     df = pd.DataFrame(coininfo, columns=['datetime', 'open', 'high', 'low', 'close', 'volume'])
     df['datetime'] = pd.to_datetime(df['datetime'], unit='ms')
     df.set_index('datetime', inplace=True)
+    await binance.close()
     return df
 
-    
+# async def past_data(sym, tf, limit, since=None):
+#     for attempt in range(3):  # 3번 재시도
+#         try:
+#             binance = get_binance()
+#             coininfo = await binance.fetch_ohlcv(
+#                 symbol=sym, 
+#                 timeframe=tf, 
+#                 since=since, 
+#                 limit=limit
+#             )
+            
+#             df = pd.DataFrame(coininfo, columns=['datetime', 'open', 'high', 'low', 'close', 'volume'])
+#             df['datetime'] = pd.to_datetime(df['datetime'], unit='ms')
+#             df.set_index('datetime', inplace=True)
+            
+#             await binance.close()
+#             return df
+            
+#         except ccxt.NetworkError as e:
+#             print(f"Network error (attempt {attempt + 1}): {e}")
+#             if binance:
+#                 await binance.close()
+#             if attempt < 2:
+#                 await asyncio.sleep(2 ** attempt)
+#             else:
+#                 raise
+#         except Exception as e:
+#             if binance:
+#                 await binance.close()
+#             raise
+        
 async def get_curr_pnl(sym):
     binance = get_binance()
     await binance.fetch_markets()
@@ -117,7 +149,9 @@ def get_binance():
         'enableRateLimit': True,
         'options': {
             'defaultType': 'future'
-        }
+        },
+        'timeout': 60000,  # 60초 타임아웃
+        'rateLimit': 1200,  # 요청 간격 조정
     })
     return binance
 

@@ -4,8 +4,9 @@ import time
 import utils
 from utils import *
 from select_sym import select_sym
-from ema_arr.find_ema_arr import tracking
+# from ema_arr.find_ema_arr import tracking
 # from ema_arr.find_ema_arr_opposite import tracking
+from wedge_analysis.support_resistance import tracking
 import asyncio
 
 
@@ -16,7 +17,7 @@ class Trader():
         self.init_amt = 0
         self.other_running_sym_num = 0
         self.status = None
-        self.lev = 2                # 0.04*lev 가 수수료
+        self.lev = 1                # 0.04*lev 가 수수료
         self.sl = -5*self.lev       # 마이너스인거 확인 & 지금 안쓰임
         self.tp = 1*self.lev        # 지금 안쓰임
         self.limit_amt_ratio = 0.0003
@@ -181,6 +182,8 @@ class Trader():
         
     async def open_market_order(self):
         self.binance = get_binance()
+        await self.prep_order()
+        
         if self.status == LONG:
             side = "buy"
         elif self.status == SHORT:
@@ -189,7 +192,6 @@ class Trader():
             symbol=self.sym, type="market", side=side, amount=np.abs(self.amount))
         # self.order_id = order['id']
         await self.binance.close()
-        
         
     async def close_limit_order(self, entry_price=None):
         self.binance = get_binance()
@@ -206,7 +208,6 @@ class Trader():
             symbol=self.sym, type="limit", side=close_side, amount=np.abs(self.amount), price=self.tp_price)
         self.close_order_id = close_order['id']
         await self.binance.close()
-        
         
     async def cancel_order(self, order_id):
         self.binance = get_binance()
@@ -230,53 +231,49 @@ class Trader():
                     self.tp_price = self.res["tp_price1"]
                     self.sl_price = self.res["sl_price1"]
                     self.ent_price = curr_price if self.res['curr_price1'] else self.res['ent_price1']
-                    self.sl = (self.res['sl_price1'] - self.res['ent_price1'])/self.res['ent_price1']*100*self.lev
-                    self.tp = (self.res['tp_price1'] - self.res['ent_price1'])/self.res['ent_price1']*100*self.lev
+                    self.sl = (self.res['sl_price1'] - self.ent_price)/self.ent_price*100*self.lev
+                    self.tp = (self.res['tp_price1'] - self.ent_price)/self.ent_price*100*self.lev
 
                 elif self.res["ent_price2"] and (curr_price <= self.res["ent_price2"] or self.res["curr_price2"]):
                     self.position_to_by = self.res["position2"]
                     self.sl_price = self.res["sl_price2"]
                     self.tp_price = self.res["tp_price2"]
                     self.ent_price = curr_price if self.res['curr_price2'] else self.res['ent_price2']
-                    self.sl = -(self.res['sl_price2'] - self.res['ent_price2'])/self.res['ent_price2']*100*self.lev
-                    self.tp = -(self.res['tp_price2'] - self.res['ent_price2'])/self.res['ent_price2']*100*self.lev
+                    self.sl = -(self.res['sl_price2'] - self.ent_price)/self.ent_price*100*self.lev
+                    self.tp = -(self.res['tp_price2'] - self.ent_price)/self.ent_price*100*self.lev
                 
-                else:
-                    max_waiting = 5*60/self.time_interval
-                    print(f"\rWaiting.. {self.t} / {max_waiting}", end="")
-                    if self.t > max_waiting:  
-                        asyncio.run(self.cancel_order(self.order_id))
-                        return self.sym, "X_buy"
+                # else:
+                #     max_waiting = 1*60/self.time_interval
+                #     print(f"\rWaiting.. {self.t} / {max_waiting}", end="")
+                #     if self.t > max_waiting:  
+                #         asyncio.run(self.cancel_order(self.order_id))
+                #         return self.sym, "X_buy"
                     
-                    self.t += 1 
-                    time.sleep(self.time_interval)
-                    continue
+                #     self.t += 1 
+                #     time.sleep(self.time_interval)
+                #     continue
                 
                 self.status = self.position_to_by
-                asyncio.run(self.open_order())
+                asyncio.run(self.open_market_order())
                 
             else :
                 curr_amt = asyncio.run(self.get_curr_sym_amt())
                 
                 if not curr_amt:
-                    # res = asyncio.run(find_ema_arrangement(self.sym, self.tp, imgfilename=f"minion{self.N}"))
                     max_waiting = 5*60/self.time_interval
                     print(f"\rWaiting.. {self.t} / {max_waiting}", end="")
                     if self.t > max_waiting:  # limit order 안사짐
                         asyncio.run(self.cancel_order(self.order_id))
                         return self.sym, "X_buy"
                         
-                    # if abs(curr_amt) > 0 and self.init_amt == 0:  # open limit close order
-                    #     asyncio.run(self.close_limit_order())
-
-                # else:
-                #     if abs(curr_amt) == 0:
-                #         print("Take profit limit order filled ! ")
-                #         return self.sym, "TP"
                 elif curr_amt:
                     curr_pnl, profit = asyncio.run(get_curr_pnl(self.sym.replace("/", "")))
-                    self.tp_price, self.sl_price, tp_close, sl_close, buy_more = asyncio.run(tracking(sym=self.sym, ent_price=self.ent_price, sl_price=self.sl_price, tp_price=self.tp_price, open_to_buy_more=open_to_buy_more, position=self.status, imgfilename=f"minion{self.N}"))
-                    
+                    self.tp_price, self.sl_price, tp_close, sl_close, buy_more = asyncio.run(tracking(sym=self.sym, ent_price=self.ent_price, 
+                                                                                                      sl_price=self.sl_price, tp_price=self.tp_price, 
+                                                                                                      open_to_buy_more=open_to_buy_more, position=self.status, imgfilename=f"minion{self.N}"))
+                    # if self.t > 500 and curr_pnl > 0:
+                    #     tp_close = True
+                        
                     if self.status == LONG:
                         self.sl = (self.sl_price - self.ent_price)/self.ent_price*100*self.lev
                         self.tp = (self.tp_price - self.ent_price)/self.ent_price*100*self.lev

@@ -2,9 +2,7 @@ from wedge_analysis.trendline_automation import *
 from wedge_analysis.wedge import *
 from utils import *
 from cal_utils import cal_rsi, cal_srsi
-from ccxt.base.errors import BadSymbol
 from HYPERPARAMETERS import *
-pd.set_option('mode.chained_assignment',  None)
 
 async def find_wedge(sym, pnl, tf = "1m", limit = 80, n=5, imgfilename="realtime", decided_res=None):
     pnl *= 0.01
@@ -16,7 +14,6 @@ async def find_wedge(sym, pnl, tf = "1m", limit = 80, n=5, imgfilename="realtime
     srsi_k, srsi_d = cal_srsi(df["close"], n=n)
     df['srsi_k'] = srsi_k
     df['srsi_d'] = srsi_d
-    
     
     df.reset_index(drop=False, inplace=True)
     df = df.iloc[-limit:]

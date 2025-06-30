@@ -17,8 +17,6 @@ import pandas as pd
 from scipy.stats import linregress
 from datetime import timedelta
 
-plt.style.use('seaborn-darkgrid')
-
 
 def pivot_id(ohlc, l, n1, n2):
     """

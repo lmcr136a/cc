@@ -1,9 +1,10 @@
-from wedge_analysis.trendline_automation import *
-from wedge_analysis.wedge import *
+import os
+from mplfinance.original_flavor import candlestick_ohlc
 from utils import *
 from HYPERPARAMETERS import *
 pd.set_option('mode.chained_assignment',  None)
-
+GAP_CORR = 2
+TF = "5m"
 
 def get_cross_points(col, i, n=3):
     t_list = [i+x for x in range(-n, 1)]
@@ -60,7 +61,7 @@ def add_emas(df):
     
 
 
-async def find_ema_arrangement_opposite(sym, pnl, tf = "15m", limit = 60, imgfilename="realtime", decided_res=None):
+async def find_ema_arrangement_opposite(sym, pnl, tf = TF, limit = 60, imgfilename="realtime", decided_res=None):
     pnl *= 0.01
     binance = get_binance()
     df = await past_data(binance, sym, tf, limit)
@@ -125,7 +126,7 @@ async def find_ema_arrangement_opposite(sym, pnl, tf = "15m", limit = 60, imgfil
     ref_i, ref_other_i = 10, 15
     ema1, ema2, ema3, ema4 = df["ema1"].iloc[curr_idx], df["ema2"].iloc[curr_idx], df["ema3"].iloc[curr_idx], df["ema4"].iloc[curr_idx]
     avg_candle_length = np.mean(np.abs(np.array(df["open"]) - np.array(df["close"])))
-    gap = 1*(np.abs(ema1 - ema2) + avg_candle_length)
+    gap = GAP_CORR*avg_candle_length
     
     def arranged_triangles(i_dcross12, i_dcross23, i_dcross34, i_ucross12, i_ucross23, i_ucross34, ref_other_i):  # for long, opposite arguments for short position
         if 0 < i_ucross12 and limit-ref_i < i_ucross34:
@@ -133,57 +134,32 @@ async def find_ema_arrangement_opposite(sym, pnl, tf = "15m", limit = 60, imgfil
                 return True
         print("\t| not arranged triangles ")
         
-    def smooth_or_enough(df, i_ref, avg_candle_length, pos):
-        p = 1 if pos == LONG else -1
-        if i_ref > 0:
-            ema1s = np.array(df["ema1"].iloc[i_ref+1:]) - np.array(df["ema1"].iloc[i_ref:-1])
-            if not np.all(ema1s*p > -avg_candle_length*0.05):
-                return True
-            # if (df["ema1"].iloc[-1] - df["ema1"].iloc[i_ref])*p > 3*avg_candle_length:
-            #     return True
-        print("\t| not smooth or enough ")
-    
-    def enough_rainbow(curr_price, ema4, avg_candle_length):
-        if np.abs(curr_price - ema4) > 0.5*avg_candle_length:
-            return True
-        print("\t| not enough rainbow")
-        
     def zigzag(num_all_cross):
-        if num_all_cross > 5:
+        if num_all_cross > 12:
             return True
         print("\t| not zigzag")
         
         
-    if enough_rainbow(curr_price, ema4, avg_candle_length) and zigzag(num_all_cross):
-        if smooth_or_enough(df, i_ucross34, avg_candle_length, LONG) and\
-           arranged_triangles(i_dcross12, i_dcross23, i_dcross34, i_ucross12, i_ucross23, i_ucross34, ref_other_i):
-            if ema1 < curr_price:
+    if zigzag(num_all_cross):
+        if ema1> ema2> ema3> ema4 and arranged_triangles(i_dcross12, i_dcross23, i_dcross34, i_ucross12, i_ucross23, i_ucross34, ref_other_i):
+            if ema3 < curr_price:
                 ent_price2 = curr_price
-                curr_price = True
-
-            # elif ema2 < curr_price < ema1:
-            #     ent_price2 = curr_price
-            #     curr_price = True
+                curr_price2 = True
             
             if ent_price2:
                 pattern = "Ascending Arrangement - will go down"
-                tp_price2 = min(ema1, ent_price2 - gap)
-                sl_price2 = max(ema1, ent_price2) + gap
+                tp_price2 = max(ent_price2 - gap, np.min(df["ema1"]))
+                sl_price2 = ent_price2 + gap
                
-        if smooth_or_enough(df, i_dcross34, avg_candle_length, SHORT) and \
-           arranged_triangles(i_ucross12, i_ucross23, i_ucross34, i_dcross12, i_dcross23, i_dcross34, ref_other_i):
+        if ema1< ema2< ema3< ema4 and arranged_triangles(i_ucross12, i_ucross23, i_ucross34, i_dcross12, i_dcross23, i_dcross34, ref_other_i):
     
-            if ema1 > curr_price:
+            if ema3 > curr_price:
                 ent_price1 = curr_price 
-                curr_price = True
-            # elif ema2 < curr_price:
-            #     ent_price1 = curr_price
-            #     curr_price = True
-                
+                curr_price1 = True
             if ent_price1:
                 pattern = "desending Arrangement - will go up"
-                tp_price1 = max(ema1, ent_price1 + gap)
-                sl_price1 = min(ema1, ent_price1) - gap
+                tp_price1 = min(ent_price1 + gap, np.max(df["ema1"]))
+                sl_price1 = ent_price1 - gap
                 
     if plot:
         ax.set_title(f"{pattern} - {sym}, {tf}", position = (0.5,1.05),fontsize = 18)
@@ -221,7 +197,7 @@ async def find_ema_arrangement_opposite(sym, pnl, tf = "15m", limit = 60, imgfil
     
     
 
-async def tracking(sym, position, ent_price, sl_price, tp_price, open_to_buy_more, tf = "15m", limit = 60, n=5, imgfilename="realtime", decided_res=None):
+async def tracking(sym, position, ent_price, sl_price, tp_price, open_to_buy_more, tf = TF, limit = 60, n=5, imgfilename="realtime", decided_res=None):
     binance = get_binance()
     df = await past_data(binance, sym, tf, limit+n)
     df = add_emas(df)
@@ -234,20 +210,20 @@ async def tracking(sym, position, ent_price, sl_price, tp_price, open_to_buy_mor
     
     ema1, ema2, ema3, ema4 = df["ema1"].iloc[curr_idx], df["ema2"].iloc[curr_idx], df["ema3"].iloc[curr_idx], df["ema4"].iloc[curr_idx]
     avg_candle_length = np.mean(np.abs(np.array(df["open"]) - np.array(df["close"])))
-    gap = 1*(np.abs(ema1 - ema2) + avg_candle_length)
+    gap = GAP_CORR*(np.abs(ema1 - ema2) + avg_candle_length)
     
     sl_close, tp_close = False, False
     buy_more = False
     if position == LONG:
-        tp_price = max(ema1, ent_price + gap)
-        sl_price = min(ema1, ent_price) - gap
+        # tp_price = max(ema1, ent_price + 2*gap)
+        # sl_price = min(ema1, ent_price) - gap
         if curr_price > tp_price:
             tp_close = True
         elif curr_price < sl_price:
             sl_close = True
     else:
-        tp_price = min(ema1, ent_price - gap)
-        sl_price = max(ema1, ent_price) + gap
+        # tp_price = min(ema1, ent_price - 2*gap)
+        # sl_price = max(ema1, ent_price) + gap
         if curr_price < tp_price:
             tp_close = True
         elif curr_price > sl_price:
