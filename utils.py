@@ -10,24 +10,42 @@ from datetime import datetime
 from HYPERPARAMETERS import *
 import asyncio
 import ccxt.pro as ccxtpro
-
+import matplotlib.dates as mdates
 
 # def cal_compound_amt(wallet_usdt, lev, price, symnum):
 #     return float(wallet_usdt*lev/float(price)*0.9/float(symnum))
 def cal_compound_amt(lev, price):
-    return float(10*lev/float(price))
+    return float(5*lev/float(price))
 
+async def retry_on_error(func, *args, **kwargs):
+    max_retries = 3
+    retry_delay = 3
+    for attempt in range(max_retries):
+        try:
+            return await func(*args, **kwargs)
+        except (ccxt.NetworkError, ccxt.ExchangeNotAvailable, ccxt.RequestTimeout) as e:
+            if attempt == max_retries - 1:
+                print(f"최대 재시도 횟수 초과: {e}")
+                raise
+            print(f"통신 에러 발생 (시도 {attempt + 1}/{max_retries}): {e}")
+            await asyncio.sleep(retry_delay)
+        except Exception as e:
+            print(f"예상치 못한 에러: {e}")
+            raise
 
 async def past_data(sym, tf, limit, since=None):
-    binance = get_binance()
-    coininfo = await binance.fetch_ohlcv(symbol=sym, 
-        timeframe=tf, since=since, limit=limit)
+    async def _past_data():
+        binance = get_binance()
+        coininfo = await binance.fetch_ohlcv(symbol=sym, 
+            timeframe=tf, since=since, limit=limit)
 
-    df = pd.DataFrame(coininfo, columns=['datetime', 'open', 'high', 'low', 'close', 'volume'])
-    df['datetime'] = pd.to_datetime(df['datetime'], unit='ms')
-    df.set_index('datetime', inplace=True)
-    await binance.close()
-    return df
+        df = pd.DataFrame(coininfo, columns=['datetime', 'open', 'high', 'low', 'close', 'volume'])
+        df['datetime'] = pd.to_datetime(df['datetime'], unit='ms')
+        df.set_index('datetime', inplace=True)
+        await binance.close()
+        return df
+    return await retry_on_error(_past_data)
+
 
 # async def past_data(sym, tf, limit, since=None):
 #     for attempt in range(3):  # 3번 재시도
@@ -114,9 +132,7 @@ def add_to_existing_positions(sym):
         f.write(str(syms))
 
 
-
 def log_wallet_history(balance):
-    today = datetime.now()
     try:
         wallet_info = np.load('wallet_log.npy')
         wallet_info = np.concatenate(
@@ -128,15 +144,32 @@ def log_wallet_history(balance):
                             )  ## Date
     except FileNotFoundError:
         wallet_info = np.array([[time.time()], [float(balance['info']['totalWalletBalance'])], [float(balance['info']['totalMarginBalance'])]])
-    np.save('wallet_log.npy', wallet_info)
-    plt.figure()
-    plt.plot(wallet_info[0], wallet_info[1], 'k-')
-    plt.plot(wallet_info[0], wallet_info[2], 'b-')
-    plt.savefig("wallet_log.png")
-    plt.close()
-
     
-
+    np.save('wallet_log.npy', wallet_info)
+    timestamps = [datetime.fromtimestamp(ts) for ts in wallet_info[0]]
+    
+    plt.figure(figsize=(8, 4))
+    plt.plot(timestamps, wallet_info[1], 'k-', label='Total Wallet Balance')
+    plt.plot(timestamps, wallet_info[2], 'b-', label='Total Margin Balance')
+    
+    ax = plt.gca()
+    data_points = len(timestamps)
+    if data_points <= 8:
+        ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+    else:
+        ax.xaxis.set_major_locator(mdates.AutoDateLocator(maxticks=8))
+        
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d\n%H:%M'))
+    plt.xticks(rotation=0)
+    plt.legend()
+    plt.title('Wallet Balance History')
+    plt.xlabel('Time')
+    plt.ylabel('Balance (USDT)')
+    plt.tight_layout()
+    plt.savefig("wallet_log.png", dpi=100, bbox_inches='tight')
+    plt.close()
+    
+    
 def get_binance():
     with open("a.txt") as f:
         lines = f.readlines()

@@ -22,47 +22,77 @@ from sklearn.cluster import DBSCAN
     
 ONCE = True
 
-def calculate_market_regime(df, ref=0.005, short_d=70, long_d=200):
-    """시장 상황 분석"""
-    close = df["close"]
-    volume = df["volume"]
-    ema_condition_long = df["ema_5"].iloc[-1] > df["ema_10"].iloc[-1] > df["ema_20"].iloc[-1]
-    ema_condition_short = df["ema_5"].iloc[-1] < df["ema_10"].iloc[-1] < df["ema_20"].iloc[-1]
-    recent_candles = df["close"].iloc[-10:]
-    green_ratio = (recent_candles.diff() > 0).sum() / 10
+def is_www_pattern(df, lookback=30):
+    if len(df) < lookback:
+        return False
 
-    # 트렌드 방향
-    sma_short = close.rolling(short_d).mean()
-    sma_long = close.rolling(long_d).mean()
+    recent_data = df.tail(lookback)
     
-    trend = "SIDEWAYS"
-    if sma_short.iloc[-1] > sma_long.iloc[-1] * (1+ref):
-        if ema_condition_long:
-            trend = "BULLISH"
-    elif sma_short.iloc[-1] < sma_long.iloc[-1] * (1-ref):
-        if ema_condition_short:
-            trend = "BEARISH"
+    bb_width = (recent_data["bb_upper2"] - recent_data["bb_lower2"]) / recent_data["bb_middle"]
+    width_std = bb_width.std()
+    width_mean = bb_width.mean()
+    width_cv = width_std / width_mean 
     
-    # 변동성 상태
-    returns = close.pct_change().dropna()
-    recent_vol = returns.tail(20).std()
-    historical_vol = returns.std()
+    # print(f"\nBB Width Mean: {width_mean:.4f}, Std: {width_std:.4f}, CV: {width_cv:.4f}")
     
-    if recent_vol > historical_vol * 1.2:
-        volatility_regime = "HIGH_VOL"
-    elif recent_vol < historical_vol * 0.8:
-        volatility_regime = "LOW_VOL"
+    width_stable = width_cv < 0.4
+    
+    bb_upper = recent_data["bb_upper2"]
+    bb_lower = recent_data["bb_lower2"]
+    bb_middle = recent_data["bb_middle"]
+    
+    x = range(len(bb_upper))
+    
+    upper_slope = np.polyfit(x, bb_upper, 1)[0]
+    upper_slope_ratio = abs(upper_slope) / bb_upper.mean()
+    
+    lower_slope = np.polyfit(x, bb_lower, 1)[0]
+    lower_slope_ratio = abs(lower_slope) / bb_lower.mean()
+    
+    middle_slope = np.polyfit(x, bb_middle, 1)[0]
+    middle_slope_ratio = abs(middle_slope) / bb_middle.mean()
+    
+    # print(f"Slopes - Upper: {upper_slope_ratio:.6f}, Lower: {lower_slope_ratio:.6f}, Middle: {middle_slope_ratio:.6f}")
+    
+    bands_flat = (upper_slope_ratio < 0.002 and 
+                lower_slope_ratio < 0.002 and 
+                middle_slope_ratio < 0.002)
+    
+    slope_diff = abs(upper_slope - lower_slope)
+    slope_diff_ratio = slope_diff / max(abs(upper_slope), abs(lower_slope), 1e-10)
+    
+    # print(f"Slope Difference Ratio: {slope_diff_ratio:.6f}")
+    
+    bands_parallel = slope_diff_ratio < 0.9
+    
+    # 최종 판단
+    is_sideways = width_stable and bands_flat and bands_parallel
+    
+    # print(f"Width Stable: {width_stable}, Bands Flat: {bands_flat}, Bands Parallel: {bands_parallel}")
+    # print(f"Final WWW Pattern: {is_sideways}")
+    
+    return is_sideways
+
+
+def determine_trend(df2):
+    long_ema_5 = df2["ema_5"].iloc[-1]
+    long_ema_10 = df2["ema_10"].iloc[-1]
+    long_uptrend = long_ema_5 > long_ema_10
+    long_downtrend = long_ema_5 < long_ema_10
+    
+    if long_uptrend:
+        return "uptrend"
+    elif long_downtrend:
+        return "downtrend"
     else:
-        volatility_regime = "NORMAL_VOL"
-    
-    return trend, volatility_regime
+        return "sideways"
 
-
-async def find_support_resistance_window(df_window, sym, ref, period=15, reward_ratio=1.5, tf="3m", imgfilename="realtime", window_idx=0):
-    df = df_window.copy()
+async def find_support_resistance_window(df, df2, sym, ref, period=15, reward_ratio=1.5, tf="3m", imgfilename="realtime", window_idx=0):
     df.reset_index(drop=True, inplace=True)
+    df2.reset_index(drop=True, inplace=True)
 
     close = df["close"]
+    close2 = df2["close"]
     high = df["high"]
     low = df["low"]
     volume = df["volume"]
@@ -71,11 +101,15 @@ async def find_support_resistance_window(df_window, sym, ref, period=15, reward_
     avg_range = df["range"].mean()
     
     df["rsi"] = cal_rsi(close, n=min(14, len(df)-1))
-    df["ema_5"] = close.ewm(span=min(5, len(df)//2), adjust=False).mean()
-    df["ema_10"] = close.ewm(span=min(10, len(df)//2), adjust=False).mean()
-    df["ema_20"] = close.ewm(span=min(20, len(df)-1), adjust=False).mean()
-    df["vol_avg"] = volume.rolling(min(10, len(df)//2)).mean()
-    df["volume_ma"] = volume.rolling(min(20, len(df)-1)).mean()
+    df["ema_5"] = close.ewm(span=5, adjust=False).mean()
+    df["ema_10"] = close.ewm(span=10, adjust=False).mean()
+    df["ema_20"] = close.ewm(span=20, adjust=False).mean()
+    df2["ema_5"] = close2.ewm(span=5, adjust=False).mean()
+    df2["ema_10"] = close2.ewm(span=10, adjust=False).mean()
+    df2["ema_20"] = close2.ewm(span=20, adjust=False).mean()
+    
+    df["vol_avg"] = volume.rolling(10).mean()
+    df["volume_ma"] = volume.rolling(20).mean()
     df["volume_ratio"] = volume / df["volume_ma"]
     df["volume_ratio"] = df["volume_ratio"].fillna(1.0)  # NaN 값을 1.0으로 채우기
     
@@ -84,95 +118,80 @@ async def find_support_resistance_window(df_window, sym, ref, period=15, reward_
     # period = min(15, len(df)-1)
     df["bb_middle"] = close.rolling(period).mean()
     df["bb_std"] = close.rolling(period).std()
-    df["bb_upper"] = df["bb_middle"] + (df["bb_std"] * 1.5)  # 표준편차 축소
-    df["bb_lower"] = df["bb_middle"] - (df["bb_std"] * 1.5)
-    
-    # MACD (간단화)
-    if len(df) > 12:
-        ema_fast = close.ewm(span=8).mean()
-        ema_slow = close.ewm(span=16).mean()
-        df["macd"] = ema_fast - ema_slow
-        df["macd_signal"] = df["macd"].ewm(span=5).mean()
-    else:
-        df["macd"] = 0
-        df["macd_signal"] = 0
-    
+    df["bb_upper1"] = df["bb_middle"] + (df["bb_std"] * 2)  # 표준편차 3
+    df["bb_lower1"] = df["bb_middle"] - (df["bb_std"] * 2)
+    df["bb_upper2"] = df["bb_middle"] + (df["bb_std"] * 3)  # 표준편차 3
+    df["bb_lower2"] = df["bb_middle"] - (df["bb_std"] * 3)
+
     # VWAP
     df["vwap"] = (close * volume).cumsum() / volume.cumsum()
-    
+
     curr_price = close.iloc[-1]
     curr_rsi = df["rsi"].iloc[-1]
-    curr_bb_upper = df["bb_upper"].iloc[-1]
-    curr_bb_lower = df["bb_lower"].iloc[-1]
+    curr_bb_upper = df["bb_upper1"].iloc[-1]
+    curr_bb_lower = df["bb_lower1"].iloc[-1]
     curr_bb_middle = df["bb_middle"].iloc[-1]
-    
+
     pattern = None
     ent_price1, tp_price1, sl_price1, curr_price1 = None, None, None, False
     ent_price2, tp_price2, sl_price2, curr_price2 = None, None, None, False
-    confidence = 0
-    
-    trend, v_trend = calculate_market_regime(df)
-    coef_near_bb, coef_sl_bb = 0.003, 0.003
-    bb_touch_lower = curr_price <= curr_bb_lower  # 하단 아래
-    bb_touch_upper = curr_price >= curr_bb_upper  # 상단 위
-    
-    if curr_bb_upper - curr_bb_lower < avg_range*3:
-        if bb_touch_lower and curr_rsi < 75 and curr_bb_lower * (1-coef_sl_bb) < curr_price and\
-            trend != "BEARISH":
-            ent_price1 = curr_price
-            sl_price1 = min(curr_bb_lower * (1-coef_sl_bb), curr_price - avg_range * ref)
-            tp_price1 = max(curr_bb_middle, curr_price + (curr_price - sl_price1) * reward_ratio)
-            curr_price1 = True
-            pattern = "Bollinger Lower Touch"
-            confidence = 0.55
-        
-        elif bb_touch_upper and curr_rsi > 25 and curr_price < curr_bb_upper * (1+coef_sl_bb) and\
-            trend != "BULLISH":
-            ent_price2 = curr_price
-            sl_price2 = max(curr_bb_upper * (1+coef_sl_bb), curr_price + avg_range * ref)
-            tp_price2 = min(curr_bb_middle, curr_price - (sl_price2 - curr_price) * reward_ratio)
-            curr_price2 = True
-            pattern = "Bollinger Upper Touch"
-            confidence = 0.55
-        
-    # if not ent_price1 and not ent_price2:
-    #     if curr_rsi < 15  and trend != "BEARISH":
-    #         ent_price1 = curr_price
-    #         sl_price1 = curr_price - avg_range * ref
-    #         tp_price1 = curr_price + (curr_price - sl_price1) * reward_ratio
-    #         curr_price1 = True
-    #         pattern = "RSI Long"
-    #     if curr_rsi > 85 and trend != "BULLISH":
-    #         ent_price2 = curr_price
-    #         sl_price2 = curr_price + avg_range * ref
-    #         tp_price2 = curr_price - (sl_price2 - curr_price) * reward_ratio
-    #         curr_price2 = True
-    #         pattern = "RSI Short"
-            
+
+    www = is_www_pattern(df)
+
+    market_trend = determine_trend(df2)
+
+    bb_touch_lower = curr_price <= curr_bb_lower  # 하단 터치
+    bb_touch_upper = curr_price >= curr_bb_upper  # 상단 터치
+
+    if www:
+        if market_trend == "uptrend":
+            if bb_touch_lower:
+                ent_price1 = curr_price
+                # sl_price1 = curr_price - avg_range * ref
+                sl_price1 = df["bb_lower2"].iloc[-1] - avg_range * ref
+                tp_price1 = max(curr_bb_middle, curr_price + (curr_price - sl_price1) * reward_ratio)
+                curr_price1 = True
+                pattern = "WWW Uptrend Long"
+                
+        elif market_trend == "downtrend":
+            if bb_touch_upper:
+                ent_price2 = curr_price
+                # sl_price2 = curr_price + avg_range * ref
+                sl_price2 = df["bb_upper2"].iloc[-1] + avg_range * ref
+                tp_price2 = min(curr_bb_middle, curr_price - (sl_price2 - curr_price) * reward_ratio)
+                curr_price2 = True
+                pattern = "WWW Downtrend Short"
+                
         
     if not pattern:
         return None
     
     # 차트 플롯 및 저장
-    if 1:
+    if len(os.listdir("sliding_backtest/")) <= 15:
         RED, ORANGE, YELLOW, GREEN = (0.6, 0, 0, 1), (0.7, 0.5, 0, 1), (0.6, 0.6, 0, 1), (0.1, 0.5, 0, 1)
         BLUE, PURPLE = (0.2, 0.3, 0.8), (0.5, 0.1, 0.6)
         plt.rcParams["figure.figsize"] = (10, 10)
         df["Index"] = df.index
+        df2["Index"] = df2.index
         curr_idx = len(df)
-        f, (ax, ax_vol, ax_rsi) = plt.subplots(3, 1, gridspec_kw={'height_ratios': [3, 1, 1]})
+        f, (ax, ax2, ax_vol, ax_rsi) = plt.subplots(4, 1, gridspec_kw={'height_ratios': [3, 3, 1, 1]})
         ax.set_facecolor((0.95, 0.95, 0.9))
+        ax2.set_facecolor((0.95, 0.95, 0.9))
         plt.subplots_adjust(top=0.9, bottom=0.05, right=0.98, left=0.1, hspace=0.5)
 
         candlestick_ohlc(ax, df.loc[:, ["Index", "open", "high", "low", "close"]].values, width=0.6, colorup='green', colordown='red', alpha=0.8)
+        candlestick_ohlc(ax2, df2.loc[:, ["Index", "open", "high", "low", "close"]].values, width=0.6, colorup='green', colordown='red', alpha=0.8)
         
-        title = f"{pattern} - {sym} {tf}"
+        title = f"{pattern} - {sym} {tf} {market_trend} www:{www}"
         ax.set_title(title, position=(0.5, 1.05), fontsize=14)
+        ax2.set_title(market_trend, position=(0.5, 1.05), fontsize=14)
         
         # 핵심 지표만 표시
         ax.plot(df["Index"], df["vwap"], color=PURPLE, linestyle='--', label='VWAP', linewidth=2)
-        ax.plot(df["Index"], df["bb_upper"], color=YELLOW, linestyle='--', label='BB', alpha=0.8)
-        ax.plot(df["Index"], df["bb_lower"], color=YELLOW, linestyle='--', alpha=0.8)
+        ax.plot(df["Index"], df["bb_upper1"], color=YELLOW, linestyle='--', label='BB2', alpha=0.8)
+        ax.plot(df["Index"], df["bb_lower1"], color=YELLOW, linestyle='--', alpha=0.8)
+        ax.plot(df["Index"], df["bb_upper2"], color=ORANGE, linestyle='--', label='BB3', alpha=0.8)
+        ax.plot(df["Index"], df["bb_lower2"], color=ORANGE, linestyle='--', alpha=0.8)
         ax.legend(loc='upper left', fontsize=10)
         
         # 볼륨 (볼륨 비율 색상 코딩)
@@ -201,12 +220,15 @@ async def find_support_resistance_window(df_window, sym, ref, period=15, reward_
             ax.axhline(sl_price2, color='red', linestyle=':', alpha=0.8, linewidth=2)
             ax.axhline(tp_price2, color='green', linestyle=':', alpha=0.8, linewidth=2)
 
+        if not pattern:
+            pattern = "NONE"
         os.makedirs("sliding_backtest/", exist_ok=True)
         now = datetime.now().strftime("%m%d_%H%M%S")
         plt.savefig(f"sliding_backtest/{now}_{imgfilename}_w{window_idx:04d}_{pattern.replace('(', '').replace(')', '')}.jpg", 
                    dpi=300, bbox_inches='tight')
         plt.close()
-        exit()
+        if len(os.listdir("sliding_backtest/")) > 20:
+            exit()
         
     return {
         "pattern": pattern,
@@ -236,13 +258,26 @@ async def run_sliding_backtest(tf, T_window, T_start=100, T_end=500, T_step=5, c
     cum_profit = 0
     
     large_vol_symlist = []
-    SYMLIST = ["BTC/USDT", "XRP/USDT", "SOL/USDT", "ETH/USDT"]
+    
+    # binance = get_binance()
+    # await binance.load_markets()
+    # market = binance.markets
+    # symlist = []
+    # for s in market.keys():
+    #     if s.split(":")[0][-4:] == "USDT":
+    #         symlist.append(s.split(":")[0])
+    # symlist = list(set(symlist))
+    # # symlist = SYMLIST
+    # await binance.close()
+    # SYMLIST = symlist
+    SYMLIST = ["ETH/USDT", "XRP/USDT", "SOL/USDT", "BNB/USDT", "DOGE/USDT", "ADA/USDT", "TRX/USDT", "AVAX/USDT", "DOT/USDT", "LINK/USDT", "BCH/USDT", "NEAR/USDT", "LTC/USDT", "UNI/USDT", "ICP/USDT", "XLM/USDT"]
+    
+    # SYMLIST = ["BTC/USDT", "XRP/USDT", "SOL/USDT", "ETH/USDT"]
     random.shuffle(SYMLIST)
     for i, sym in enumerate(SYMLIST):
         try:
             print(f"\n=== Testing {sym} ===")
             
-            # 볼륨 체크
             binance = get_binance()
             try:
                 vol = await binance.fetch_tickers(symbols=[sym])
@@ -258,28 +293,42 @@ async def run_sliding_backtest(tf, T_window, T_start=100, T_end=500, T_step=5, c
                 continue
             
             large_vol_symlist.append(sym)
-            # 전체 데이터 한번만 호출 (충분히 큰 limit)
             future_t = 100
             total_limit = T_end + future_t  # 여유분 추가
             df_full = await past_data(sym, tf, total_limit)
-            df_full.reset_index(drop=True, inplace=True)
-            
+            df2_full = await past_data(sym, "1h", total_limit)
             print(f"Full data loaded: {len(df_full)} candles")
             
-            # 슬라이딩 윈도우로 백테스트
-            for window_idx, t in enumerate(range(T_start, min(T_end, len(df_full)-future_t), T_step)):
-                # 윈도우 데이터 추출 (t개 캔들)
+            timeframe_ratio = 4  # 1시간 = 12 * 5분
+            # timeframe_ratio = 12  # 1시간 = 12 * 5분
+            
+            hourly_indices = []
+            for idx in range(len(df_full)):
+                if df_full.index[idx].minute == 0:  # 정각 데이터
+                    hourly_indices.append(idx)
+            
+            for window_idx, t in enumerate(hourly_indices):
+                if t < T_start or t >= len(df_full) - future_t:
+                    continue
+                    
                 df_window = df_full.iloc[t-T_window:t].copy()
                 
-                if len(df_window) < 60:  # 최소 데이터 요구사항
-                    continue
+                current_1h_idx = len(df2_full) - 1 - ((len(df_full) - 1 - t) // timeframe_ratio)
                 
-                for (period, reward_ratio, ref) in [(64, 2, 0.5)]:
+                T_window_1h = T_window // timeframe_ratio
+                
+                end_1h = min(len(df2_full), current_1h_idx + 1)
+                
+                df2_window = df2_full.iloc[end_1h-T_window-2:end_1h-1].copy()
+                current_time = df_window.index[-1]
+                current_time_1h = df2_window.index[-1]
+
+                for (period, reward_ratio, ref) in [(20, 1.5, 1.5)]:
                     k = f"{period}_{reward_ratio}_{ref}"
         
                     # 시그널 감지
                     res = await find_support_resistance_window(
-                        df_window, sym=sym, ref=ref,
+                        df_window, df2_window,sym=sym, ref=ref,
                         period=period, reward_ratio=reward_ratio,
                         tf=tf, 
                         imgfilename=f"{tf}", 
@@ -326,7 +375,7 @@ async def run_sliding_backtest(tf, T_window, T_start=100, T_end=500, T_step=5, c
                                     hit_index = np.min(sl_is)
                                     print(f"❌ SL HIT at index {hit_index} - PnL: {pnl:.2f}%")
                                 else:
-                                    pnl = (future_df["close"].iloc[-1] - ent_price) / ent_price * 100
+                                    pnl =  0.02
                                     hit_index = len(future_df)
                                     print(f"⏸️ NO CONCLUSION - Current PnL: {pnl:.2f}%")
                                     
@@ -344,7 +393,7 @@ async def run_sliding_backtest(tf, T_window, T_start=100, T_end=500, T_step=5, c
                                     hit_index = np.min(sl_is)
                                     print(f"❌ SL HIT at index {hit_index} - PnL: {pnl:.2f}%")
                                 else:
-                                    pnl = -(future_df["close"].iloc[-1] - ent_price) / ent_price * 100
+                                    pnl = 0.02
                                     hit_index = len(future_df)
                                     print(f"⏸️ NO CONCLUSION - Current PnL: {pnl:.2f}%")
                             
@@ -410,16 +459,16 @@ async def run_sliding_backtest(tf, T_window, T_start=100, T_end=500, T_step=5, c
                                 os.makedirs("backtest/", exist_ok=True)
                                 plt.savefig(filename, dpi=300, bbox_inches='tight')
                                 plt.close()
-                                
+                            
                             # 결과 통계 업데이트
                             pattern_key = res["pattern"]
                             if tp_close:
-                                if k+"_"+pattern_key + "_profit" in results:
+                                if k+"_"+pattern_key + "_profit" in results.keys():
                                     results[k+"_"+pattern_key + "_profit"] += 1
                                 else:
                                     results[k+"_"+pattern_key + "_profit"] = 1
                             elif sl_close:
-                                if k+"_"+pattern_key + "_loss" in results:
+                                if k+"_"+pattern_key + "_loss" in results.keys():
                                     results[k+"_"+pattern_key + "_loss"] += 1
                                 else:
                                     results[k+"_"+pattern_key + "_loss"] = 1
@@ -511,11 +560,12 @@ def print_results_simple(results):
         pattern = key.replace('_profit', '').replace('_loss', '').replace('(', '').replace(')', '')
         if pattern not in patterns:
             patterns[pattern] = [0, 0]  # [wins, losses]
+            
         if '_profit' in key:
             patterns[pattern][0] = value
         else:
             patterns[pattern][1] = value
-    
+            
     print("📊 Results:")
     for pattern, (w, l) in patterns.items():
         wr = w/(w+l)*100 if w+l > 0 else 0
@@ -526,6 +576,6 @@ def print_results_simple(results):
 
 if __name__ == "__main__":
 
-    tf = "5m"
-    profit = asyncio.run(run_sliding_backtest(tf, T_window=300, T_start=301, T_end=1400))
+    tf = "15m"
+    profit = asyncio.run(run_sliding_backtest(tf, T_window=70, T_start=71, T_end=1400))
           

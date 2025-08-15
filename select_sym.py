@@ -8,43 +8,47 @@ from wedge_analysis.support_resistance import find_support_resistance
 from utils import *
 pd.set_option('mode.chained_assignment',  None)
 
+
+async def get_vol(sym):
+    async def _get_vol():
+        binance = get_binance()
+        vol = await binance.fetch_tickers(symbols=[sym])
+        await binance.close()
+        return vol
+    return await retry_on_error(_get_vol)
+        
+
+
 async def select_sym(N, tp):
     binance = get_binance()
     print(y("\nSEARCHING..."))
     return_pos = None
     
-    await binance.load_markets()
-    market = binance.markets
-    symlist = []
-    for s in market.keys():
-        if s.split(":")[0][-4:] == "USDT":
-            symlist.append(s.split(":")[0])
-    symlist = list(set(symlist))
-    # symlist = SYMLIST
-    await binance.close()
-    
+    # await binance.load_markets()
+    # market = binance.markets
+    # symlist = []
+    # for s in market.keys():
+    #     if s.split(":")[0][-4:] == "USDT":
+    #         symlist.append(s.split(":")[0])
+    # symlist = list(set(symlist))
+    # # symlist = SYMLIST
+    # await binance.close()
+    symlist = ["ETH/USDT", "XRP/USDT", "SOL/USDT", "BNB/USDT", "DOGE/USDT", "ADA/USDT", "TRX/USDT", "AVAX/USDT", "DOT/USDT", "LINK/USDT", "BCH/USDT", "NEAR/USDT", "LTC/USDT", "UNI/USDT", "ICP/USDT", "XLM/USDT"]
     while return_pos is None:
         random.shuffle(symlist)
         for i, sym in enumerate(symlist):  # 0705 0.55초 걸
-            if sym in ["USDC/USDT", "BTC/USDT"]:
-                continue
+            # if sym in ["USDC/USDT", "BTC/USDT"]:
+            #     continue
             # sym = 'VANA/USDT'
             try:
-                binance = get_binance()
-                vol = await binance.fetch_tickers(symbols=[sym])
-                time.sleep(1)
-                await binance.close()
-                    
-                if (not len(list(vol.values())) > 0) or list(vol.values())[0]['quoteVolume'] < 1*(10**5):
-                    symlist.pop(i)
-                    continue
+                # vol = await get_vol(sym)
+                # if (not len(list(vol.values())) > 0) or list(vol.values())[0]['quoteVolume'] < 1*(10**6):
+                #     symlist.pop(i)
+                #     continue
                 
                 print(f"[{i}/{len(symlist)}]", sym)
                 res = await find_support_resistance(sym, tp, imgfilename="minion"+str(N))
-                # res = await find_wedge(sym, pnl, imgfilename="minion"+str(N))
-                # if not res:
-                # res = await find_heikin(sym, imgfilename="minion"+str(N))
-                
+
                 if res:
                     print(sym)
                     print(res)

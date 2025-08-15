@@ -18,9 +18,6 @@ from ccxt.base.errors import BadSymbol
 from cal_utils import cal_rsi, cal_srsi
 from scipy.signal import argrelextrema
 from sklearn.cluster import DBSCAN
-    
-    
-ONCE = True
 
 def calculate_market_regime(df, ref=0.005, short_d=70, long_d=200):
     """시장 상황 분석"""
@@ -74,20 +71,19 @@ async def find_support_resistance_window(df_window, sym, ref, period=15, reward_
     df["ema_5"] = close.ewm(span=min(5, len(df)//2), adjust=False).mean()
     df["ema_10"] = close.ewm(span=min(10, len(df)//2), adjust=False).mean()
     df["ema_20"] = close.ewm(span=min(20, len(df)-1), adjust=False).mean()
+    df["ema_50"] = close.ewm(span=min(50, len(df)-1), adjust=False).mean()
     df["vol_avg"] = volume.rolling(min(10, len(df)//2)).mean()
     df["volume_ma"] = volume.rolling(min(20, len(df)-1)).mean()
     df["volume_ratio"] = volume / df["volume_ma"]
-    df["volume_ratio"] = df["volume_ratio"].fillna(1.0)  # NaN 값을 1.0으로 채우기
-    
+    df["volume_ratio"] = df["volume_ratio"].fillna(1.0)
     
     # 볼린저 밴드
-    # period = min(15, len(df)-1)
     df["bb_middle"] = close.rolling(period).mean()
     df["bb_std"] = close.rolling(period).std()
-    df["bb_upper"] = df["bb_middle"] + (df["bb_std"] * 1.5)  # 표준편차 축소
+    df["bb_upper"] = df["bb_middle"] + (df["bb_std"] * 1.5)
     df["bb_lower"] = df["bb_middle"] - (df["bb_std"] * 1.5)
     
-    # MACD (간단화)
+    # MACD 
     if len(df) > 12:
         ema_fast = close.ewm(span=8).mean()
         ema_slow = close.ewm(span=16).mean()
@@ -100,11 +96,35 @@ async def find_support_resistance_window(df_window, sym, ref, period=15, reward_
     # VWAP
     df["vwap"] = (close * volume).cumsum() / volume.cumsum()
     
+    # 추가 지표들
+    # Stochastic
+    if len(df) > 14:
+        lowest_low = low.rolling(14).min()
+        highest_high = high.rolling(14).max()
+        df["stoch_k"] = 100 * (close - lowest_low) / (highest_high - lowest_low)
+        df["stoch_d"] = df["stoch_k"].rolling(3).mean()
+    else:
+        df["stoch_k"] = 50
+        df["stoch_d"] = 50
+    
+    # ATR
+    df["tr"] = df[["high", "low", "close"]].apply(
+        lambda x: max(x["high"] - x["low"], 
+                     abs(x["high"] - x["close"]), 
+                     abs(x["low"] - x["close"])), axis=1
+    )
+    df["atr"] = df["tr"].rolling(14).mean()
+    
     curr_price = close.iloc[-1]
     curr_rsi = df["rsi"].iloc[-1]
     curr_bb_upper = df["bb_upper"].iloc[-1]
     curr_bb_lower = df["bb_lower"].iloc[-1]
     curr_bb_middle = df["bb_middle"].iloc[-1]
+    curr_macd = df["macd"].iloc[-1]
+    curr_macd_signal = df["macd_signal"].iloc[-1]
+    curr_stoch_k = df["stoch_k"].iloc[-1]
+    curr_stoch_d = df["stoch_d"].iloc[-1]
+    curr_atr = df["atr"].iloc[-1]
     
     pattern = None
     ent_price1, tp_price1, sl_price1, curr_price1 = None, None, None, False
@@ -112,49 +132,79 @@ async def find_support_resistance_window(df_window, sym, ref, period=15, reward_
     confidence = 0
     
     trend, v_trend = calculate_market_regime(df)
-    coef_near_bb, coef_sl_bb = 0.003, 0.003
-    bb_touch_lower = curr_price <= curr_bb_lower  # 하단 아래
-    bb_touch_upper = curr_price >= curr_bb_upper  # 상단 위
     
-    if curr_bb_upper - curr_bb_lower < avg_range*3:
-        if bb_touch_lower and curr_rsi < 75 and curr_bb_lower * (1-coef_sl_bb) < curr_price and\
-            trend != "BEARISH":
-            ent_price1 = curr_price
-            sl_price1 = min(curr_bb_lower * (1-coef_sl_bb), curr_price - avg_range * ref)
-            tp_price1 = max(curr_bb_middle, curr_price + (curr_price - sl_price1) * reward_ratio)
-            curr_price1 = True
-            pattern = "Bollinger Lower Touch"
-            confidence = 0.55
+    # 알고리즘 5: 데드캣 바운스 단타
+    if pattern is None and len(df) > 20:
+        # 급락 감지를 위한 지표들
+        recent_5_low = low.iloc[-5:].min()
+        recent_20_low = low.iloc[-20:].min()
+        recent_5_high = high.iloc[-5:].max()
         
-        elif bb_touch_upper and curr_rsi > 25 and curr_price < curr_bb_upper * (1+coef_sl_bb) and\
-            trend != "BULLISH":
-            ent_price2 = curr_price
-            sl_price2 = max(curr_bb_upper * (1+coef_sl_bb), curr_price + avg_range * ref)
-            tp_price2 = min(curr_bb_middle, curr_price - (sl_price2 - curr_price) * reward_ratio)
-            curr_price2 = True
-            pattern = "Bollinger Upper Touch"
-            confidence = 0.55
+        # 최근 5봉 내 급락 체크
+        price_drops = []
+        for i in range(1, 6):
+            if i < len(df):
+                drop_pct = (close.iloc[-i] - close.iloc[-i-1]) / close.iloc[-i-1] * 100
+                price_drops.append(drop_pct)
         
-    # if not ent_price1 and not ent_price2:
-    #     if curr_rsi < 15  and trend != "BEARISH":
-    #         ent_price1 = curr_price
-    #         sl_price1 = curr_price - avg_range * ref
-    #         tp_price1 = curr_price + (curr_price - sl_price1) * reward_ratio
-    #         curr_price1 = True
-    #         pattern = "RSI Long"
-    #     if curr_rsi > 85 and trend != "BULLISH":
-    #         ent_price2 = curr_price
-    #         sl_price2 = curr_price + avg_range * ref
-    #         tp_price2 = curr_price - (sl_price2 - curr_price) * reward_ratio
-    #         curr_price2 = True
-    #         pattern = "RSI Short"
+        # 급락 조건
+        max_drop = min(price_drops) if price_drops else 0
+        volume_surge = df["volume_ratio"].iloc[-1] > 1.5
+        
+        # 급락 후 반등 시점 찾기
+        sharp_decline = max_drop < -2.0  # 2% 이상 급락
+        oversold_rsi = curr_rsi < 30
+        hammer_pattern = (close.iloc[-1] - low.iloc[-1]) > (high.iloc[-1] - close.iloc[-1]) * 2
+        
+        # 데드캣 바운스 롱 조건
+        if (sharp_decline and oversold_rsi and volume_surge and
+            curr_price > recent_5_low * 1.005 and  # 저점 대비 약간 상승
+            curr_price < recent_5_high * 0.95 and  # 고점 대비 충분한 하락
+            close.iloc[-1] > close.iloc[-2] and     # 현재 봉이 상승 마감
+            df["volume"].iloc[-1] > df["volume"].iloc[-2]):  # 볼륨 증가
             
+            ent_price1 = curr_price
+            # 타이트한 스톱로스 (급락 저점 바로 아래)
+            sl_price1 = recent_5_low * 0.997
+            # 빠른 이익실현 (1:1 비율, 단타)
+            tp_price1 = curr_price + (curr_price - sl_price1) * 1.0
+            curr_price1 = True
+            pattern = "Dead Cat Bounce Long"
+            confidence = 0.48
         
+        # 데드캣 바운스 숏 (급등 후 되돌림)
+        price_surges = []
+        for i in range(1, 6):
+            if i < len(df):
+                surge_pct = (close.iloc[-i] - close.iloc[-i-1]) / close.iloc[-i-1] * 100
+                price_surges.append(surge_pct)
+        
+        max_surge = max(price_surges) if price_surges else 0
+        sharp_rise = max_surge > 2.0  # 2% 이상 급등
+        overbought_rsi = curr_rsi > 70
+        shooting_star = (high.iloc[-1] - close.iloc[-1]) > (close.iloc[-1] - low.iloc[-1]) * 2
+        
+        if (sharp_rise and overbought_rsi and volume_surge and
+            curr_price < recent_5_high * 0.995 and  # 고점 대비 약간 하락
+            curr_price > recent_20_low * 1.05 and   # 저점 대비 충분한 상승
+            close.iloc[-1] < close.iloc[-2] and      # 현재 봉이 하락 마감
+            df["volume"].iloc[-1] > df["volume"].iloc[-2]):  # 볼륨 증가
+            
+            ent_price2 = curr_price
+            # 타이트한 스톱로스 (급등 고점 바로 위)
+            sl_price2 = recent_5_high * 1.003
+            # 빠른 이익실현 (1:1 비율, 단타)
+            tp_price2 = curr_price - (sl_price2 - curr_price) * 1.0
+            curr_price2 = True
+            pattern = "Dead Cat Bounce Short"
+            confidence = 0.48
+    
+    
     if not pattern:
         return None
     
     # 차트 플롯 및 저장
-    if 1:
+    if 0:
         RED, ORANGE, YELLOW, GREEN = (0.6, 0, 0, 1), (0.7, 0.5, 0, 1), (0.6, 0.6, 0, 1), (0.1, 0.5, 0, 1)
         BLUE, PURPLE = (0.2, 0.3, 0.8), (0.5, 0.1, 0.6)
         plt.rcParams["figure.figsize"] = (10, 10)
@@ -206,7 +256,6 @@ async def find_support_resistance_window(df_window, sym, ref, period=15, reward_
         plt.savefig(f"sliding_backtest/{now}_{imgfilename}_w{window_idx:04d}_{pattern.replace('(', '').replace(')', '')}.jpg", 
                    dpi=300, bbox_inches='tight')
         plt.close()
-        exit()
         
     return {
         "pattern": pattern,
@@ -225,7 +274,7 @@ async def find_support_resistance_window(df_window, sym, ref, period=15, reward_
     }
 
 
-async def run_sliding_backtest(tf, T_window, T_start=100, T_end=500, T_step=5, coef_near_bb=0.002, coef_sl_bb=0.005):
+async def run_sliding_backtest(tf, T_window, T_start=100, T_end=500, T_step=2, coef_near_bb=0.002, coef_sl_bb=0.005):
     
     pnls = 100
     running_times = []
@@ -274,7 +323,7 @@ async def run_sliding_backtest(tf, T_window, T_start=100, T_end=500, T_step=5, c
                 if len(df_window) < 60:  # 최소 데이터 요구사항
                     continue
                 
-                for (period, reward_ratio, ref) in [(64, 2, 0.5)]:
+                for (period, reward_ratio, ref) in [(15, 1.4, 3), (15, 1.8, 3), (15, 2.2, 3), (15, 2.5, 3), (15, 3, 3), (15, 4, 3)]:
                     k = f"{period}_{reward_ratio}_{ref}"
         
                     # 시그널 감지
@@ -307,14 +356,15 @@ async def run_sliding_backtest(tf, T_window, T_start=100, T_end=500, T_step=5, c
                             future_df = df_full.iloc[t:t+future_t].copy()  # 50개 캔들 미래
                             future_df.reset_index(drop=True, inplace=True)
                             
-                            closes = np.array(future_df["close"])
+                            highs = np.array(future_df["high"])
+                            lows = np.array(future_df["low"])
                             tp_close, sl_close, pnl = False, False, 0
                             hit_index = None
                             
                             # 포지션별 손익 계산
                             if position == LONG:
-                                tp_is = np.where(closes >= tp_price)[0]
-                                sl_is = np.where(closes <= sl_price)[0]
+                                tp_is = np.where(highs >= tp_price)[0]
+                                sl_is = np.where(lows <= sl_price)[0]
                                 if len(tp_is) > 0 and (len(sl_is) == 0 or np.min(tp_is) < np.min(sl_is)):
                                     pnl = (tp_price - ent_price) / ent_price * 100
                                     tp_close = True
@@ -331,8 +381,8 @@ async def run_sliding_backtest(tf, T_window, T_start=100, T_end=500, T_step=5, c
                                     print(f"⏸️ NO CONCLUSION - Current PnL: {pnl:.2f}%")
                                     
                             elif position == SHORT:
-                                tp_is = np.where(closes <= tp_price)[0]
-                                sl_is = np.where(closes >= sl_price)[0]
+                                tp_is = np.where(lows <= tp_price)[0]
+                                sl_is = np.where(highs >= sl_price)[0]
                                 if len(tp_is) > 0 and (len(sl_is) == 0 or np.min(tp_is) < np.min(sl_is)):
                                     pnl = -(tp_price - ent_price) / ent_price * 100
                                     tp_close = True
@@ -344,7 +394,7 @@ async def run_sliding_backtest(tf, T_window, T_start=100, T_end=500, T_step=5, c
                                     hit_index = np.min(sl_is)
                                     print(f"❌ SL HIT at index {hit_index} - PnL: {pnl:.2f}%")
                                 else:
-                                    pnl = -(future_df["close"].iloc[-1] - ent_price) / ent_price * 100
+                                    pnl = 0.02
                                     hit_index = len(future_df)
                                     print(f"⏸️ NO CONCLUSION - Current PnL: {pnl:.2f}%")
                             
